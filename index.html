@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="description" content="SOLARIS · 单文件交互式太阳系动效网页：纯 Canvas 零依赖，点击行星镜头跟随、2.5D 视角、彗星近日点喷尾、银河视差星空。">
+<meta property="og:title" content="SOLARIS · 太阳系漫游">
+<meta property="og:description" content="纯 Canvas 打造的交互式太阳系：点击行星镜头飞行跟随，2.5D 视角切换，彗星近日点喷尾，单文件零依赖。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://raw.githubusercontent.com/Miracle-Tang/solar-system/main/screenshots/overview.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ffd27d'/%3E%3Cellipse cx='16' cy='16' rx='14' ry='5' fill='none' stroke='%237dd3fc' stroke-width='1.4' opacity='.7'/%3E%3C/svg%3E">
 <title>SOLARIS · 太阳系漫游</title>
 <style>
@@ -23,7 +29,7 @@
     color: var(--text);
     user-select: none; -webkit-user-select: none;
   }
-  #stage { position: fixed; inset: 0; display: block; cursor: grab; }
+  #stage { position: fixed; inset: 0; display: block; cursor: grab; touch-action: none; }
   #stage.dragging { cursor: grabbing; }
 
   /* ---------- 标题 ---------- */
@@ -81,6 +87,19 @@
   }
   #backBtn.show { display: block; }
   #backBtn:hover { background: rgba(125,211,252,.22); }
+  #date { font-size: 12px; letter-spacing: 1.5px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .jumps { display: flex; gap: 4px; }
+  .jumps button {
+    border: 1px solid var(--glass-border); background: rgba(0,0,0,.25); color: var(--text-dim);
+    font-size: 11px; padding: 4px 8px; border-radius: 8px; cursor: pointer; transition: all .2s;
+  }
+  .jumps button:hover { color: var(--accent); border-color: rgba(255,210,125,.5); }
+  #fps {
+    position: fixed; left: 14px; bottom: 12px; z-index: 10; display: none;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px; font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  #fps.show { display: block; }
 
   /* ---------- 目标导航条 ---------- */
   #nav {
@@ -174,12 +193,20 @@
 <div id="panel">
   <button id="playBtn" title="暂停 / 播放">❚❚</button>
   <div class="ctrl"><label>速度</label><input type="range" id="spd" min="0" max="10" step="0.1" value="1"><span id="spdVal">1.0×</span></div>
+  <div class="ctrl"><span id="date">——</span></div>
+  <div class="ctrl jumps">
+    <button id="j1" title="时间前进 1 年">+1年</button>
+    <button id="j10" title="时间前进 10 年">+10年</button>
+  </div>
   <div class="ctrl"><label>轨道</label><label class="switch"><input type="checkbox" id="swOrbit" checked><i></i></label></div>
   <div class="ctrl"><label>标签</label><label class="switch"><input type="checkbox" id="swLabel" checked><i></i></label></div>
+  <div class="ctrl"><label>帧率</label><label class="switch"><input type="checkbox" id="swFps"><i></i></label></div>
   <div class="ctrl"><label>声音</label><label class="switch"><input type="checkbox" id="swSnd"><i></i></label></div>
+  <button id="tiltBtn" title="切换 俯视 / 2.5D 斜视角">2.5D</button>
   <button id="backBtn">返回全景</button>
   <button id="hintBtn" title="操作说明">?</button>
 </div>
+<div id="fps"></div>
 
 <div id="help">
   <div id="helpCard">
@@ -190,6 +217,9 @@
       <tr><td>悬停行星</td><td>显示名称标签</td></tr>
       <tr><td>点击行星</td><td>镜头飞向并跟随该行星，展示档案</td></tr>
       <tr><td>导航条 / <kbd>←</kbd><kbd>→</kbd></td><td>在 太阳 → 行星 → 彗星 之间随意切换视角</td></tr>
+      <tr><td><kbd>V</kbd> / 2.5D 按钮</td><td>俯视全景 ↔ 斜视角 立体切换</td></tr>
+      <tr><td>+1年 / +10年</td><td>时间跳跃，观察行星公转</td></tr>
+      <tr><td>双指捏合</td><td>触屏设备缩放（与滚轮等效）</td></tr>
       <tr><td><kbd>Esc</kbd> / 空白处</td><td>返回全景视角</td></tr>
       <tr><td><kbd>Space</kbd></td><td>暂停 / 继续时间流动</td></tr>
       <tr><td>速度滑块</td><td>0（冻结）~ 10× 时间流速</td></tr>
@@ -266,58 +296,93 @@ let hoverBody = null;
 let focusBody = null;         // 跟随的天体（null = 全景）
 const drag = { on: false, moved: false, sx: 0, sy: 0, cx: 0, cy: 0 };
 
-/* ---------- 天体档案 ---------- */
-// r: 屏幕基準轨道半径（观感压缩），size: 绘制半径，period: 相对公转周期
-// 开普勒感：角速度 ∝ r^-1.5，内行星明显快
+/* ---------- 天体档案 ----------
+   数据参考：NASA Planetary Fact Sheet（直径/公转周期/距日）
+   omega: 真实近日点经度（度），用于 2.5D 下轨道取向错落
+   note:  目标音阶频率（切目标时播放） */
 const BODIES = [
   { id:"mercury", name:"水星", en:"MERCURY", r:  78, size: 3.4, dia:"4,879 km", per:"88 天",  dist:"0.39 AU",
-    base:"#b8a798", dark:"#4a4038", glow:null, fun:"最小也最神秘的行星，一天比一年还长。" },
+    base:"#b8a798", dark:"#4a4038", glow:null, omega: 77.5, note: 440,
+    marks:[[0.2,0.2,0.18,0.18,"#8a7f72",0.5],[0.65,-0.25,0.14,0.14,"#8a7f72",0.45],[0.45,-0.4,0.1,0.1,"#938879",0.4]],
+    fun:"最小也最神秘的行星，一天比一年还长。" },
   { id:"venus",   name:"金星", en:"VENUS",   r: 112, size: 5.6, dia:"12,104 km", per:"225 天", dist:"0.72 AU",
-    base:"#f0d9a8", dark:"#7a5f3a", glow:"rgba(255,220,150,.16)", fun:"温室效应失控的世界，表面 464°C，还是逆向自转。" },
+    base:"#f0d9a8", dark:"#7a5f3a", glow:"rgba(255,220,150,.16)", omega: 131.5, note: 494,
+    marks:[[0.25,0,0.6,0.22,"#fff2cf",0.28],[0.7,0.3,0.5,0.2,"#e8c890",0.25]],
+    fun:"温室效应失控的世界，表面 464°C，还是逆向自转。" },
   { id:"earth",   name:"地球", en:"EARTH",   r: 150, size: 6.0, dia:"12,742 km", per:"365 天", dist:"1.00 AU",
-    base:"#6fb7e8", dark:"#123a6e", glow:"rgba(120,190,255,.22)", fun:"目前已知唯一存在生命的星球，也是我们的一切。",
-    moon:{ r: 13, size: 1.7, period: 0.25, base:"#c9c9d4", dark:"#555560" } },
+    base:"#6fb7e8", dark:"#123a6e", glow:"rgba(120,190,255,.22)", omega: 103, note: 523,
+    marks:[[0.15,0.1,0.55,0.5,"#3f8f4f",0.55],[0.55,-0.35,0.4,0.35,"#4a9a58",0.5],[0.82,0.35,0.45,0.4,"#3a8a4a",0.5]],
+    cap:true,
+    fun:"目前已知唯一存在生命的星球，也是我们的一切。",
+    moons:[{ r: 13, size: 1.7, period: 0.25, base:"#c9c9d4", dark:"#555560" }] },
   { id:"mars",    name:"火星", en:"MARS",    r: 192, size: 4.6, dia:"6,779 km", per:"687 天", dist:"1.52 AU",
-    base:"#e8825a", dark:"#6e2c1a", glow:"rgba(255,140,100,.12)", fun:"奥林帕斯山高约 22 km，是太阳系最高的山峰。" },
+    base:"#e8825a", dark:"#6e2c1a", glow:"rgba(255,140,100,.12)", omega: 336, note: 587,
+    marks:[[0.3,0.15,0.5,0.3,"#8a3c22",0.4],[0.7,-0.3,0.35,0.25,"#7a3220",0.35]], cap:true,
+    fun:"奥林帕斯山高约 22 km，是太阳系最高的山峰。" },
   { id:"jupiter", name:"木星", en:"JUPITER", r: 268, size: 15,  dia:"139,820 km", per:"11.9 年", dist:"5.20 AU",
-    base:"#e8c39a", dark:"#7a4a2c", glow:null, fun:"大红斑是一场持续了至少 350 年的风暴，能装下整个地球。",
-    bands: true, spot: true },
+    base:"#e8c39a", dark:"#7a4a2c", glow:null, omega: 14.7, note: 659,
+    bands: true, spot: true,
+    marks:[[0.3,-0.45,0.3,0.12,"#f0e0c8",0.4],[0.75,0.4,0.25,0.1,"#e8d0b0",0.35]],
+    fun:"大红斑是一场持续了至少 350 年的风暴，能装下整个地球。",
+    moons:[
+      { r: 21, size: 1.0, period: 0.11, base:"#e8d9a0", dark:"#6a5a3a" },
+      { r: 26, size: 1.1, period: 0.18, base:"#d8e8e0", dark:"#5a6a62" },
+      { r: 32, size: 1.5, period: 0.32, base:"#c8b890", dark:"#5a4a32" },
+      { r: 39, size: 1.3, period: 0.6,  base:"#b0a898", dark:"#4a4438" },
+    ] },
   { id:"saturn",  name:"土星", en:"SATURN",  r: 340, size: 12.5,dia:"116,460 km", per:"29.5 年", dist:"9.58 AU",
-    base:"#eeddb2", dark:"#8a6f42", glow:null, fun:"平均密度比水还低——如果有足够大的浴缸，它能浮起来。",
-    ring: true },
+    base:"#eeddb2", dark:"#8a6f42", glow:null, omega: 92.4, note: 784,
+    marks:[[0.3,0.1,0.55,0.16,"#d8c090",0.3],[0.75,-0.3,0.45,0.14,"#c8b080",0.25]],
+    ring: true,
+    fun:"平均密度比水还低——如果有足够大的浴缸，它能浮起来。" },
   { id:"uranus",  name:"天王星", en:"URANUS", r: 408, size: 9,  dia:"50,724 km", per:"84 年",  dist:"19.2 AU",
-    base:"#a8e6e2", dark:"#2c6a72", glow:"rgba(150,235,230,.14)", fun:"自转轴倾斜 98°，几乎是「躺着」绕太阳滚动。" },
+    base:"#a8e6e2", dark:"#2c6a72", glow:"rgba(150,235,230,.14)", omega: 171, note: 880,
+    ring: { rot: -1.32, thin: true },
+    fun:"自转轴倾斜 98°，几乎是「躺着」绕太阳滚动。" },
   { id:"neptune", name:"海王星", en:"NEPTUNE", r: 470, size: 8.6,dia:"49,244 km", per:"164.8 年", dist:"30.1 AU",
-    base:"#6f8fe8", dark:"#1c2a6e", glow:"rgba(120,150,255,.16)", fun:"风速可达 2,100 km/h，是太阳系最狂暴的大气。" },
+    base:"#6f8fe8", dark:"#1c2a6e", glow:"rgba(120,150,255,.16)", omega: 45, note: 988,
+    marks:[[0.35,0.05,0.3,0.18,"#2a3a9a",0.6]],
+    fun:"风速可达 2,100 km/h，是太阳系最狂暴的大气。" },
+  { id:"pluto",   name:"冥王星", en:"PLUTO",  r: 530, size: 2.2, dia:"2,376 km", per:"248 年", dist:"39.5 AU",
+    base:"#cbb8a0", dark:"#5a4a3a", glow:null, omega: 224, note: 1046,
+    marks:[[0.4,0.1,0.45,0.3,"#b09a80",0.4],[0.25,-0.3,0.2,0.2,"#e8dcc8",0.3]],
+    fun:"2006 年被「降级」为矮行星，但心形冰原让它始终最受欢迎。" },
 ];
 BODIES.forEach((b, i) => {
   b.ang = rand(0, TAU);
   b.angSpd = TAU * 0.06 * Math.pow(150 / b.r, 1.5);   // 开普勒式：内快外慢
   b.phase = rand(0, TAU);
   b.viewZoom = clamp(95 / b.size, 1.6, 6.2);          // 点击跟随时的推荐观察距离
+  b.omega = (b.omega || 0) * Math.PI / 180;           // 近日点经度 → 弧度（2.5D 轨道取向）
+  b.note = b.note || 660;
 });
 const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"—", dist:"0 AU",
-  viewZoom: 2.6,
+  viewZoom: 2.6, note: 220,
   fun:"占整个太阳系质量的 99.86%，每秒把 400 万吨物质变成光。" };
 
 /* ---------- 彗星 ---------- */
 const comet = {
   a: 300, e: 0.7, ang: rand(0, TAU), size: 2.2,
   name:"彗星", en:"COMET", dia:"~11 km", per:"~76 年", dist:"0.3 – 30 AU",
-  viewZoom: 3.2,
+  viewZoom: 3.2, note: 1175, omega: 2.0,
   fun:"冰与尘埃构成的「脏雪球」，逼近太阳时升华喷尾，尾巴永远背向太阳。",
 };
-// 椭圆轨道参数化：太阳位于焦点，极坐标直接给出焦点系坐标
+// 椭圆轨道参数化：太阳位于焦点，极坐标直接给出焦点系坐标（随 omega 旋转取向）
 function cometPos() {
-  const a = comet.a, e = comet.e;
+  const a = comet.a, e = comet.e, O = comet.omega;
   const th = comet.ang;
   const r = a * (1 - e * e) / (1 + e * Math.cos(th));
-  return { x: r * Math.cos(th), y: r * Math.sin(th) * 0.98, r };
+  return {
+    x: r * Math.cos(th) * Math.cos(O) - r * Math.sin(th) * Math.sin(O),
+    y: (r * Math.cos(th) * Math.sin(O) + r * Math.sin(th) * Math.cos(O)) * 0.98,
+    r,
+  };
 }
 
-/* ---------- 小行星带 ---------- */
+/* ---------- 小行星带 / 柯伊伯带 ---------- */
 const asteroids = [];
-(function initAsteroids() {
+const kuiper = [];
+(function initBelts() {
   for (let i = 0; i < 760; i++) {
     const a = rand(214, 246) + rand(-6, 6);
     asteroids.push({
@@ -326,6 +391,16 @@ const asteroids = [];
       spd: TAU * 0.06 * Math.pow(150 / a, 1.5) * rand(0.9, 1.1),
       size: rand(0.4, 1.4),
       tone: rand(0.45, 0.9),
+    });
+  }
+  for (let i = 0; i < 520; i++) {
+    const a = rand(575, 635) + rand(-8, 8);
+    kuiper.push({
+      a,
+      ang: rand(0, TAU),
+      spd: TAU * 0.06 * Math.pow(150 / a, 1.5) * rand(0.9, 1.1),
+      size: rand(0.4, 1.2),
+      tone: rand(0.25, 0.6),
     });
   }
 })();
@@ -421,6 +496,8 @@ function ensureAudio() {
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination);
+    // 首次交互时若上次的音效设置为开，自动接上氛围垫
+    if (CFG.sound) { if (AC.state === "suspended") AC.resume(); startPad(); }
   } catch (e) { AC = null; }
 }
 function startPad() {
@@ -483,12 +560,18 @@ function sfxWhoosh() {
 }
 
 /* ============================================================
-   坐标变换
+   坐标变换（支持 2.5D：世界 y 按 tiltCur 压缩，1=俯视 → 0.45=斜视）
    ============================================================ */
+let tiltCur = 1;                 // 当前投影压缩比（平滑过渡）
+function project(wx, wy) {
+  return { x: wx, y: wy * tiltCur };
+}
 function w2s(wx, wy) {
-  return { x: (wx - cam.x) * cam.zoom + CX, y: (wy - cam.y) * cam.zoom + CY };
+  const p = project(wx, wy);
+  return { x: (p.x - cam.x) * cam.zoom + CX, y: (p.y - cam.y) * cam.zoom + CY };
 }
 function s2w(sx, sy) {
+  // 返回「投影空间」坐标（cam 也在该空间工作）；拾取请用 w2s + pickBody
   return { x: (sx - CX) / cam.zoom + cam.x, y: (sy - CY) / cam.zoom + cam.y };
 }
 
@@ -499,7 +582,8 @@ let lastT = performance.now();
 
 function update(dtSec) {
   const dt = paused ? 0 : dtSec * speed;
-  simT += dt;
+  // simT 单位 = 年。地球一圈 16.67s（speed=1）= 1 年，日期与公转同步
+  simT += dt * 0.06;
   for (const b of BODIES) b.ang += b.angSpd * dt;
   for (const a of asteroids) a.ang += a.spd * dt;
   // 彗星：面积速率近似（dθ/dt ∝ 1/r²），近日点明显加速
@@ -527,16 +611,18 @@ function update(dtSec) {
     if (fx[i].t >= 1) fx.splice(i, 1);
   }
 
-  // 相机跟随（彗星为动态目标）
+  // 相机跟随（彗星为动态目标）；cam 工作在投影空间，y 需乘压缩比
   if (focusBody) {
     const p = focusPos(focusBody);
-    cam.tx = p.x; cam.ty = p.y;
+    cam.tx = p.x; cam.ty = p.y * tiltCur;
   }
   const k = 1 - Math.pow(0.0022, dtSec);      // 帧率无关平滑
   cam.x = lerp(cam.x, cam.tx, k);
   cam.y = lerp(cam.y, cam.ty, k);
   // 缩放在对数空间插值：远近飞行匀速丝滑，无"先猛后停"感
   cam.zoom = Math.exp(lerp(Math.log(cam.zoom), Math.log(cam.tzoom), k));
+  // 2.5D 视角平滑过渡
+  tiltCur = lerp(tiltCur, CFG.tilt ? 0.45 : 1, 1 - Math.pow(0.008, dtSec));
   // 镜头速度 → warp 强度（仅镜头飞向目标时出现速度线，拖拽平移不触发）
   const camSpd = Math.hypot(cam.x - warp.prevX, cam.y - warp.prevY) * cam.zoom;
   warp.prevX = cam.x; warp.prevY = cam.y;
@@ -630,18 +716,37 @@ function render(now) {
   ctx.scale(cam.zoom, cam.zoom);
   ctx.translate(-cam.x, -cam.y);
 
-  /* --- 轨道线（悬停目标高亮） --- */
+  /* --- 轨道线（悬停目标高亮；2.5D 下按近日点经度取向 + y 压缩） --- */
   if (CFG.orbits) {
     ctx.lineWidth = 1 / cam.zoom;
+    const ORB_SEGS = 96;
+    const orbitPath = (r, omega) => {
+      ctx.beginPath();
+      for (let i = 0; i <= ORB_SEGS; i++) {
+        const th = (i / ORB_SEGS) * TAU + omega;
+        const px = Math.cos(th) * r;
+        const py = Math.sin(th) * r * tiltCur;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    };
     for (const b of BODIES) {
       ctx.strokeStyle = hoverBody === b ? "rgba(255, 214, 150, 0.42)" : "rgba(150, 170, 230, 0.13)";
-      ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.stroke();
+      orbitPath(b.r, b.omega);
+      ctx.stroke();
     }
     // 彗星轨道
     ctx.strokeStyle = hoverBody === comet ? "rgba(140, 220, 250, 0.38)" : "rgba(120, 200, 235, 0.10)";
+    const cO = comet.omega, ca = comet.a, ce = comet.e;
     ctx.beginPath();
-    const a = comet.a, e = comet.e, b2 = a * Math.sqrt(1 - e * e);
-    ctx.ellipse(-a * e, 0, a, b2, 0, 0, TAU);
+    for (let i = 0; i <= ORB_SEGS; i++) {
+      const th = (i / ORB_SEGS) * TAU;
+      const rr = ca * (1 - ce * ce) / (1 + ce * Math.cos(th));
+      const px = rr * Math.cos(th) * Math.cos(cO) - rr * Math.sin(th) * Math.sin(cO) - ca * ce * Math.cos(cO);
+      const py = (rr * Math.cos(th) * Math.sin(cO) + rr * Math.sin(th) * Math.cos(cO) - ca * ce * Math.sin(cO)) * tiltCur;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.stroke();
   }
 
@@ -649,15 +754,22 @@ function render(now) {
   for (const p of solarWind) {
     const fade = clamp(1 - p.r / 500, 0, 1);
     ctx.fillStyle = `rgba(255, 205, 130, ${p.a * fade})`;
-    const x = Math.cos(p.ang) * p.r, y = Math.sin(p.ang) * p.r;
+    const x = Math.cos(p.ang) * p.r, y = Math.sin(p.ang) * p.r * tiltCur;
     ctx.fillRect(x - p.size / 2, y - p.size / 2, p.size, p.size);
   }
 
-  /* --- 小行星带（zoom 大时淡出，避免遮挡行星特写） --- */
+  /* --- 小行星带 / 柯伊伯带（zoom 大时淡出，避免遮挡行星特写） --- */
   const astFade = clamp(1.25 / cam.zoom, 0.22, 1);
   for (const a of asteroids) {
-    const x = Math.cos(a.ang) * a.a, y = Math.sin(a.ang) * a.a;
+    const x = Math.cos(a.ang) * a.a, y = Math.sin(a.ang) * a.a * tiltCur;
     ctx.fillStyle = `rgba(200, 194, 182, ${a.tone * 0.62 * astFade})`;
+    const s = a.size * clamp(Math.pow(1 / cam.zoom, 0.6), 0.45, 1.1);
+    ctx.fillRect(x - s / 2, y - s / 2, s, s);
+  }
+  const kFade = clamp(1.6 / cam.zoom, 0.1, 1);
+  for (const a of kuiper) {
+    const x = Math.cos(a.ang) * a.a, y = Math.sin(a.ang) * a.a * tiltCur;
+    ctx.fillStyle = `rgba(170, 178, 200, ${a.tone * 0.5 * kFade})`;
     const s = a.size * clamp(Math.pow(1 / cam.zoom, 0.6), 0.45, 1.1);
     ctx.fillRect(x - s / 2, y - s / 2, s, s);
   }
@@ -666,29 +778,35 @@ function render(now) {
   for (const p of cometParts) {
     ctx.globalAlpha = p.life * 0.7;
     ctx.fillStyle = `hsl(${p.hue}, 90%, 74%)`;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y * tiltCur, p.size * 0.6, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
 
-  /* --- 行星（含拖尾弧） --- */
-  for (const b of BODIES) {
+  /* --- 行星（含拖尾弧；按投影深度排序，2.5D 下近处压远处） --- */
+  const drawList = [...BODIES].sort((p1, p2) =>
+    (bodyPos(p1).y * tiltCur) - (bodyPos(p2).y * tiltCur));
+  for (const b of drawList) {
     const p = bodyPos(b);
     // 运动方向拖尾弧（细而淡，仅作方向感）
     if (CFG.orbits) {
       const dirSign = Math.sign(b.angSpd);
       const streak = clamp(0.55 * speed * (paused ? 0 : 1), 0.06, 0.9);
       const segs = 24;
-      for (let i = 0; i < segs; i++) {
-        const a0 = b.ang - dirSign * (i / segs) * streak;
-        const a1 = b.ang - dirSign * ((i + 1) / segs) * streak;
-        ctx.strokeStyle = `rgba(170, 195, 255, ${(1 - i / segs) * 0.11})`;
-        ctx.lineWidth = b.size * 0.22 * (1 - i / segs * 0.6);
-        ctx.beginPath();
-        ctx.arc(0, 0, b.r, Math.min(a0, a1), Math.max(a0, a1));
-        ctx.stroke();
+      let prev = null;
+      for (let i = 0; i <= segs; i++) {
+        const a0 = b.ang - dirSign * (i / segs) * streak + b.omega;
+        const pt = { x: Math.cos(a0) * b.r, y: Math.sin(a0) * b.r * tiltCur };
+        if (prev) {
+          ctx.strokeStyle = `rgba(170, 195, 255, ${(1 - i / segs) * 0.11})`;
+          ctx.lineWidth = b.size * 0.22 * (1 - i / segs * 0.6);
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y); ctx.lineTo(pt.x, pt.y);
+          ctx.stroke();
+        }
+        prev = pt;
       }
     }
-    drawPlanet(b, p.x, p.y, now);
+    drawPlanet(b, p.x, p.y * tiltCur, now);
   }
 
   /* --- 太阳 --- */
@@ -696,15 +814,16 @@ function render(now) {
 
   /* --- 彗星本体 --- */
   const cp = cometPos();
+  const cpy = cp.y * tiltCur;
   {
-    const g = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, 8);
+    const g = ctx.createRadialGradient(cp.x, cpy, 0, cp.x, cpy, 8);
     g.addColorStop(0, "rgba(220, 250, 255, 0.95)");
     g.addColorStop(0.4, "rgba(150, 225, 250, 0.55)");
     g.addColorStop(1, "rgba(150, 225, 250, 0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cp.x, cp.y, 8, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(cp.x, cpy, 8, 0, TAU); ctx.fill();
     ctx.fillStyle = "#eafcff";
-    ctx.beginPath(); ctx.arc(cp.x, cp.y, 1.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(cp.x, cpy, 1.6, 0, TAU); ctx.fill();
   }
 
   ctx.restore();
@@ -801,7 +920,7 @@ function render(now) {
 /* ---------- 行星绘制 ---------- */
 function drawPlanet(b, x, y, now) {
   const R = b.size;
-  const sunDir = Math.atan2(-y, -x);                 // 指向太阳
+  const sunDir = Math.atan2(-y, -x * Math.max(tiltCur, 0.001)); // 指向太阳（投影空间近似）
   const off = R * 0.45;
   const gx = x + Math.cos(sunDir) * off, gy = y + Math.sin(sunDir) * off;
 
@@ -814,7 +933,7 @@ function drawPlanet(b, x, y, now) {
     ctx.beginPath(); ctx.arc(x, y, R * 2.1, 0, TAU); ctx.fill();
   }
 
-  // 土星环（后半：远端）
+  // 环（后半：远端）
   if (b.ring) drawRing(b, x, y, true);
 
   // 本体：受光面渐变
@@ -847,36 +966,73 @@ function drawPlanet(b, x, y, now) {
     ctx.globalAlpha = 1;
   }
 
+  // 表面纹理斑块：随自转流动，双份绘制覆盖接缝
+  if (b.marks) {
+    const rot = now * 0.00006 * 60 * (b.id === "venus" ? -0.4 : 1);   // 金星逆向自转
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();
+    for (const m of b.marks) {
+      let u = (m[0] + rot) % 1; if (u < 0) u += 1;
+      for (const du of [0, -1]) {
+        const mx = x - R + (u + du) * 2 * R;
+        ctx.globalAlpha = m[5];
+        ctx.fillStyle = m[4];
+        ctx.beginPath();
+        ctx.ellipse(mx, y + m[1] * R, m[2] * R, m[3] * R, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // 极冠（地球 / 火星）
+  if (b.cap) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();
+    ctx.fillStyle = "#eef4ff";
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.ellipse(x, y - R * 0.86, R * 0.62, R * 0.3, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.ellipse(x, y + R * 0.88, R * 0.5, R * 0.24, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   // 边缘描一道细光
   ctx.strokeStyle = "rgba(255,255,255,0.10)";
   ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.stroke();
 
-  // 土星环（前半）
+  // 环（前半）
   if (b.ring) drawRing(b, x, y, false);
 
-  // 地球的月球
-  if (b.moon) {
-    const m = b.moon;
-    const ma = b.ang / m.period;
-    const mx = x + Math.cos(ma) * m.r, my = y + Math.sin(ma) * m.r;
-    const mg = ctx.createRadialGradient(mx - m.size * 0.4, my - m.size * 0.4, m.size * 0.1, mx, my, m.size * 1.3);
-    mg.addColorStop(0, m.base); mg.addColorStop(1, m.dark);
-    ctx.fillStyle = mg;
-    ctx.beginPath(); ctx.arc(mx, my, m.size, 0, TAU); ctx.fill();
+  // 卫星系统
+  if (b.moons) {
+    for (const m of b.moons) {
+      const ma = b.ang / m.period + m.r;
+      const mx = x + Math.cos(ma) * m.r;
+      const my = y + Math.sin(ma) * m.r * Math.max(tiltCur, 0.35);
+      const mg = ctx.createRadialGradient(mx - m.size * 0.4, my - m.size * 0.4, m.size * 0.1, mx, my, m.size * 1.3);
+      mg.addColorStop(0, m.base); mg.addColorStop(1, m.dark);
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(mx, my, m.size, 0, TAU); ctx.fill();
+    }
   }
 }
 
 function drawRing(b, x, y, backHalf) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(-0.45);
+  ctx.rotate(b.ring && b.ring.rot !== undefined ? b.ring.rot : -0.45);
   const R = b.size;
-  const rings = [
-    { rx: R * 1.45, ry: R * 0.44, w: R * 0.34, c: "rgba(230, 205, 155, 0.55)" },
-    { rx: R * 1.85, ry: R * 0.56, w: R * 0.22, c: "rgba(205, 180, 130, 0.38)" },
-    { rx: R * 2.12, ry: R * 0.64, w: R * 0.10, c: "rgba(225, 205, 165, 0.26)" },
-  ];
+  const rings = b.ring && b.ring.thin
+    ? [{ rx: R * 1.7, ry: R * 0.5, w: R * 0.12, c: "rgba(180, 235, 230, 0.30)" }]
+    : [
+        { rx: R * 1.45, ry: R * 0.44, w: R * 0.34, c: "rgba(230, 205, 155, 0.55)" },
+        { rx: R * 1.85, ry: R * 0.56, w: R * 0.22, c: "rgba(205, 180, 130, 0.38)" },
+        { rx: R * 2.12, ry: R * 0.64, w: R * 0.10, c: "rgba(225, 205, 165, 0.26)" },
+      ];
   for (const r of rings) {
     ctx.strokeStyle = r.c;
     ctx.lineWidth = r.w;
@@ -946,7 +1102,9 @@ function drawSun(now) {
 /* ============================================================
    DOM 同步（标签 / 信息卡）
    ============================================================ */
-const CFG = { orbits: true, labels: true, sound: false };
+const CFG = { orbits: true, labels: true, sound: false, tilt: false, fps: false };
+let startEpoch = Date.now();      // 日期系统基准：打开页面那一刻
+let fpsShown = 0;
 const tip = document.getElementById("tip");
 const card = document.getElementById("card");
 let cardShownFor = null;
@@ -995,14 +1153,40 @@ function fillCard(b) {
 /* ============================================================
    交互
    ============================================================ */
+// 活动指针表：支持双指捏合缩放（移动端）
+const activePointers = new Map();
+let pinchBase = null;            // { dist, zoom }
+
 canvas.addEventListener("pointerdown", e => {
   ensureAudio();
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (activePointers.size === 2) {
+    // 进入捏合：记录两指距离与当前缩放，暂停拖拽
+    const pts = [...activePointers.values()];
+    pinchBase = { dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), zoom: cam.tzoom };
+    drag.on = false;
+    return;
+  }
   drag.on = true; drag.moved = false;
   drag.sx = e.clientX; drag.sy = e.clientY;
   drag.cx = cam.tx; drag.cy = cam.ty;
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove", e => {
+  if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // 双指捏合缩放：以两指中点为锚
+  if (activePointers.size === 2 && pinchBase) {
+    const pts = [...activePointers.values()];
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    const before = s2w(mid.x, mid.y);
+    cam.tzoom = clamp(pinchBase.zoom * (dist / pinchBase.dist), ZMIN, ZMAX);
+    const after = s2w(mid.x, mid.y);
+    cam.tx += before.x - after.x;
+    cam.ty += before.y - after.y;
+    if (focusBody) setFocus(null, true);
+    return;
+  }
   mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true;
   if (drag.on) {
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
@@ -1018,8 +1202,14 @@ canvas.addEventListener("pointermove", e => {
     }
   }
 });
-window.addEventListener("pointerup", e => { drag.on = false; });
-canvas.addEventListener("pointerleave", () => { mouse.active = false; });
+function pointerReleased(e) {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) pinchBase = null;
+  if (activePointers.size === 0) drag.on = false;
+}
+window.addEventListener("pointerup", pointerReleased);
+window.addEventListener("pointercancel", pointerReleased);
+canvas.addEventListener("pointerleave", () => { mouse.active = false; drag.on = false; });
 
 canvas.addEventListener("click", e => {
   if (drag.moved) return;
@@ -1045,10 +1235,11 @@ function setFocus(b, keepCam = false) {
   focusBody = b;
   if (b) {
     const p = focusPos(b);
-    cam.tx = p.x; cam.ty = p.y;
+    cam.tx = p.x; cam.ty = p.y * tiltCur;
     cam.tzoom = b.viewZoom || clamp(95 / b.size, 1.6, 6.2);
     fx.push({ type: "lock", body: b, t: 0 });     // 目标锁定动画
     sfxWhoosh();
+    sfxBlip(b.note || 660, 0.3, 0.09);            // 每个天体一个音高，切换如弹音阶
     showToast("正在前往 " + b.name + " · ←/→ 切换目标");
   } else if (!keepCam) {
     cam.tx = 0; cam.ty = 0; cam.tzoom = fitZoom();
@@ -1064,8 +1255,9 @@ window.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT") return;
   if (e.code === "Space") { e.preventDefault(); togglePause(); }
   else if (e.key === "Escape") setFocus(null);
+  else if (e.key === "v" || e.key === "V") document.getElementById("tiltBtn").click();
   else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-    // 在 太阳 → 八大行星 → 彗星 之间循环切换视角
+    // 在 太阳 → 行星 → 彗星 之间循环切换视角
     e.preventDefault();
     const list = focusOrder();
     let i = list.indexOf(focusBody);
@@ -1095,14 +1287,75 @@ document.getElementById("playBtn").addEventListener("click", togglePause);
 document.getElementById("spd").addEventListener("input", e => {
   speed = +e.target.value;
   document.getElementById("spdVal").textContent = speed.toFixed(1) + "×";
+  saveSettings();
 });
-document.getElementById("swOrbit").addEventListener("change", e => CFG.orbits = e.target.checked);
-document.getElementById("swLabel").addEventListener("change", e => CFG.labels = e.target.checked);
+// 时间跳跃：+1 / +10 年（行星位置跳变，日期同步）
+document.getElementById("j1").addEventListener("click", () => jumpYears(1));
+document.getElementById("j10").addEventListener("click", () => jumpYears(10));
+function jumpYears(n) {
+  simT += n;
+  showToast(`时间前进 ${n} 年`);
+  sfxBlip(520 + n * 60);
+}
+document.getElementById("swOrbit").addEventListener("change", e => { CFG.orbits = e.target.checked; saveSettings(); });
+document.getElementById("swLabel").addEventListener("change", e => { CFG.labels = e.target.checked; saveSettings(); });
+document.getElementById("swFps").addEventListener("change", e => {
+  CFG.fps = e.target.checked;
+  document.getElementById("fps").classList.toggle("show", CFG.fps);
+  saveSettings();
+});
 document.getElementById("swSnd").addEventListener("change", e => {
   CFG.sound = e.target.checked;
   ensureAudio();
   if (CFG.sound) { if (AC && AC.state === "suspended") AC.resume(); startPad(); sfxBlip(700); }
   else stopPad();
+  saveSettings();
+});
+// 2.5D 斜视角切换（V 键同效）
+document.getElementById("tiltBtn").addEventListener("click", () => {
+  CFG.tilt = !CFG.tilt;
+  document.getElementById("tiltBtn").classList.toggle("on", CFG.tilt);
+  showToast(CFG.tilt ? "2.5D 斜视角" : "俯视全景");
+  sfxBlip(CFG.tilt ? 840 : 440);
+  saveSettings();
+});
+// 设置持久化：音效 / 轨道 / 标签 / 帧率 / 速度 / 视角
+const SETTINGS_KEY = "solaris-settings-v1";
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      sound: CFG.sound, orbits: CFG.orbits, labels: CFG.labels,
+      fps: CFG.fps, tilt: CFG.tilt, speed,
+    }));
+  } catch (e) { /* 隐私模式等场景下静默失败 */ }
+}
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (typeof s.sound === "boolean") CFG.sound = s.sound;
+    if (typeof s.orbits === "boolean") CFG.orbits = s.orbits;
+    if (typeof s.labels === "boolean") CFG.labels = s.labels;
+    if (typeof s.fps === "boolean") CFG.fps = s.fps;
+    if (typeof s.tilt === "boolean") CFG.tilt = s.tilt;
+    if (typeof s.speed === "number") speed = clamp(s.speed, 0, 10);
+  } catch (e) { /* 忽略损坏数据 */ }
+}
+// 回放已保存设置到控件（在启动前调用）
+function applySettingsToDom() {
+  document.getElementById("swOrbit").checked = CFG.orbits;
+  document.getElementById("swLabel").checked = CFG.labels;
+  document.getElementById("swFps").checked = CFG.fps;
+  document.getElementById("swSnd").checked = CFG.sound;
+  document.getElementById("fps").classList.toggle("show", CFG.fps);
+  document.getElementById("tiltBtn").classList.toggle("on", CFG.tilt);
+  document.getElementById("spd").value = speed;
+  document.getElementById("spdVal").textContent = speed.toFixed(1) + "×";
+}
+// 切到后台自动静音（省电 + 不打扰），回来恢复
+document.addEventListener("visibilitychange", () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend();
+  else if (CFG.sound) AC.resume();
 });
 document.getElementById("backBtn").addEventListener("click", () => setFocus(null));
 const help = document.getElementById("help");
@@ -1113,19 +1366,36 @@ help.addEventListener("click", e => { if (e.target === help) help.classList.remo
 /* ============================================================
    主循环
    ============================================================ */
+let fpsAcc = 0, fpsN = 0, dateTick = 0;
 function tick(now) {
   const rawDt = clamp((now - lastT) / 1000, 0.001, 0.1);
   lastT = now;
+  // FPS 统计（面板开关控制显示）
+  fpsAcc += rawDt; fpsN++;
+  if (fpsAcc >= 0.5) {
+    fpsShown = Math.round(fpsN / fpsAcc);
+    if (CFG.fps) document.getElementById("fps").textContent = fpsShown + " FPS";
+    fpsAcc = 0; fpsN = 0;
+  }
+  // 日期显示（每 12 帧刷新一次足够）
+  if (++dateTick % 12 === 0) {
+    const d = new Date(startEpoch + simT * 365.25 * 86400000);
+    document.getElementById("date").textContent =
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
   update(rawDt);
   render(now);
   requestAnimationFrame(tick);
 }
 
 resize();
+loadSettings();          // 恢复上次的音效/轨道/标签/帧率/视角/速度设置
+applySettingsToDom();
+tiltCur = CFG.tilt ? 0.45 : 1;
 // 开场镜头：从深空远处飞入到近景
 cam.zoom = fitZoom() * 0.38;
 cam.tzoom = fitZoom();
-// 目标导航条：太阳 → 八大行星 → 彗星
+// 目标导航条：太阳 → 行星（含冥王星）→ 彗星
 (function buildNav() {
   const nav = document.getElementById("nav");
   focusOrder().forEach((b, i) => {
@@ -1140,7 +1410,8 @@ requestAnimationFrame(tick);
 
 // 只读调试/自动化接口（不影响行为）
 window.__solar = { w2s, s2w, BODIES, bodyPos, sun, comet,
-  getHover: () => hoverBody, getFocus: () => focusBody, cam, setFocus, warp, fx };
+  getHover: () => hoverBody, getFocus: () => focusBody, cam, setFocus, warp, fx,
+  getSimT: () => simT, getSpeed: () => speed };
 })();
 </script>
 </body>
