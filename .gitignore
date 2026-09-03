@@ -1,0 +1,5 @@
+v4_*.png
+sol_*.png
+shot_*.png
+dbg_*.png
+.playwright-cli/
