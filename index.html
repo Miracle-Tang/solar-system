@@ -204,6 +204,10 @@
   #card .row span:first-child { color: var(--text-dim); }
   #card .fun { margin-top: 10px; font-size: 12px; line-height: 1.65; color: #e8d9ff; }
   #card .fun::before { content: "✦ "; color: var(--accent); }
+  #card .hist { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgba(150,170,255,.14);
+    font-size: 11.5px; line-height: 1.65; color: #a9bfe4; }
+  #card .hist::before { content: "🛰 探 测 史"; display: block; margin-bottom: 4px;
+    font-size: 10px; letter-spacing: 2px; color: var(--text-dim); }
 
   #toast { position: fixed; top: 26px; left: 50%; z-index: 20;
     transform: translateX(-50%) translateY(-8px); padding: 8px 22px; border-radius: 999px;
@@ -284,6 +288,7 @@
   <div class="row"><span>公转周期</span><span id="cPer">—</span></div>
   <div class="row"><span>距太阳</span><span id="cDist">—</span></div>
   <div class="fun" id="cFun">—</div>
+  <div class="hist" id="cHist">—</div>
 </div>
 <div id="toast"></div>
 
@@ -352,26 +357,31 @@ const BODIES = [
   { id:"mercury", name:"水星", en:"MERCURY", r:  78, size: 3.4, dia:"4,879 km", per:"88 天",  dist:"0.39 AU",
     base:"#b8a798", dark:"#4a4038", glow:null, omega: 77.5, note: 440,
     marks:[[0.2,0.2,0.18,0.18,"#8a7f72",0.5],[0.65,-0.25,0.14,0.14,"#8a7f72",0.45],[0.45,-0.4,0.1,0.1,"#938879",0.4]],
-    fun:"最小也最神秘的行星，一天比一年还长。" },
+    fun:"最小也最神秘的行星，一天比一年还长。",
+    hist:"水手 10 号 1974 年首次飞掠；信使号 2011–15 年环绕测绘；贝皮可伦坡号 2026 年底入轨。" },
   { id:"venus",   name:"金星", en:"VENUS",   r: 112, size: 5.6, dia:"12,104 km", per:"225 天", dist:"0.72 AU",
     base:"#f0d9a8", dark:"#7a5f3a", glow:"rgba(255,220,150,.16)", omega: 131.5, note: 494,
     marks:[[0.25,0,0.6,0.22,"#fff2cf",0.28],[0.7,0.3,0.5,0.2,"#e8c890",0.25]],
-    fun:"温室效应失控的世界，表面 464°C，还是逆向自转。" },
+    fun:"温室效应失控的世界，表面 464°C，还是逆向自转。",
+    hist:"金星 7 号 1970 年完成首次地外天体软着陆；麦哲伦号用雷达揭开浓云之下的地表。" },
   { id:"earth",   name:"地球", en:"EARTH",   r: 150, size: 6.0, dia:"12,742 km", per:"365 天", dist:"1.00 AU",
     base:"#6fb7e8", dark:"#123a6e", glow:"rgba(120,190,255,.22)", omega: 103, note: 523,
     marks:[[0.15,0.1,0.55,0.5,"#3f8f4f",0.55],[0.55,-0.35,0.4,0.35,"#4a9a58",0.5],[0.82,0.35,0.45,0.4,"#3a8a4a",0.5]],
     cap:true,
     fun:"目前已知唯一存在生命的星球，也是我们的一切。",
+    hist:"不必派探测器——我们就住在这里。1961 年加加林成为第一个从太空回望全貌的人类。",
     moons:[{ r: 13, size: 1.7, period: 0.25, base:"#c9c9d4", dark:"#555560" }] },
   { id:"mars",    name:"火星", en:"MARS",    r: 192, size: 4.6, dia:"6,779 km", per:"687 天", dist:"1.52 AU",
     base:"#e8825a", dark:"#6e2c1a", glow:"rgba(255,140,100,.12)", omega: 336, note: 587,
     marks:[[0.3,0.15,0.5,0.3,"#8a3c22",0.4],[0.7,-0.3,0.35,0.25,"#7a3220",0.35]], cap:true,
-    fun:"奥林帕斯山高约 22 km，是太阳系最高的山峰。" },
+    fun:"奥林帕斯山高约 22 km，是太阳系最高的山峰。",
+    hist:"海盗 1 号 1976 年首次着陆；如今毅力号与直升机机智号仍在杰泽罗陨石坑工作。" },
   { id:"jupiter", name:"木星", en:"JUPITER", r: 268, size: 15,  dia:"139,820 km", per:"11.9 年", dist:"5.20 AU",
     base:"#e8c39a", dark:"#7a4a2c", glow:null, omega: 14.7, note: 659,
     bands: true, spot: true,
     marks:[[0.3,-0.45,0.3,0.12,"#f0e0c8",0.4],[0.75,0.4,0.25,0.1,"#e8d0b0",0.35]],
     fun:"大红斑是一场持续了至少 350 年的风暴，能装下整个地球。",
+    hist:"旅行者号 1979 年拍下大红斑特写；伽利略号 1995–2003 年环绕；朱诺号至今仍在勘察。",
     moons:[
       { r: 21, size: 1.0, period: 0.11, base:"#e8d9a0", dark:"#6a5a3a" },
       { r: 26, size: 1.1, period: 0.18, base:"#d8e8e0", dark:"#5a6a62" },
@@ -382,19 +392,23 @@ const BODIES = [
     base:"#eeddb2", dark:"#8a6f42", glow:null, omega: 92.4, note: 784,
     marks:[[0.3,0.1,0.55,0.16,"#d8c090",0.3],[0.75,-0.3,0.45,0.14,"#c8b080",0.25]],
     ring: true,
-    fun:"平均密度比水还低——如果有足够大的浴缸，它能浮起来。" },
+    fun:"平均密度比水还低——如果有足够大的浴缸，它能浮起来。",
+    hist:"卡西尼号 2004–2017 年环绕十三年，最终冲入土星大气化作流星谢幕；惠更斯号则登陆了土卫六。" },
   { id:"uranus",  name:"天王星", en:"URANUS", r: 408, size: 9,  dia:"50,724 km", per:"84 年",  dist:"19.2 AU",
     base:"#a8e6e2", dark:"#2c6a72", glow:"rgba(150,235,230,.14)", omega: 171, note: 880,
     ring: { rot: -1.32, thin: true },
-    fun:"自转轴倾斜 98°，几乎是「躺着」绕太阳滚动。" },
+    fun:"自转轴倾斜 98°，几乎是「躺着」绕太阳滚动。",
+    hist:"1986 年旅行者 2 号迄今唯一一次到访——短短几小时飞掠，改写了我们对它的全部认知。" },
   { id:"neptune", name:"海王星", en:"NEPTUNE", r: 470, size: 8.6,dia:"49,244 km", per:"164.8 年", dist:"30.1 AU",
     base:"#6f8fe8", dark:"#1c2a6e", glow:"rgba(120,150,255,.16)", omega: 45, note: 988,
     marks:[[0.35,0.05,0.3,0.18,"#2a3a9a",0.6]],
-    fun:"风速可达 2,100 km/h，是太阳系最狂暴的大气。" },
+    fun:"风速可达 2,100 km/h，是太阳系最狂暴的大气。",
+    hist:"1989 年旅行者 2 号飞掠，至今仍是唯一访客，它带回的特写仍是海王星最好的照片。" },
   { id:"pluto",   name:"冥王星", en:"PLUTO",  r: 530, size: 2.2, dia:"2,376 km", per:"248 年", dist:"39.5 AU",
     base:"#cbb8a0", dark:"#5a4a3a", glow:null, omega: 224, note: 1046,
     marks:[[0.4,0.1,0.45,0.3,"#b09a80",0.4],[0.25,-0.3,0.2,0.2,"#e8dcc8",0.3]],
-    fun:"2006 年被「降级」为矮行星，但心形冰原让它始终最受欢迎。" },
+    fun:"2006 年被「降级」为矮行星，但心形冰原让它始终最受欢迎。",
+    hist:"新视野号飞行 9 年半、跨越 48 亿公里，2015 年为心形冰原拍下第一张清晰定妆照。" },
 ];
 BODIES.forEach((b, i) => {
   b.ang = rand(0, TAU);
@@ -406,7 +420,8 @@ BODIES.forEach((b, i) => {
 });
 const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"绕银心 ~2.3 亿年", dist:"0 AU · 万物基准",
   viewZoom: 2.6, note: 220,
-  fun:"占整个太阳系质量的 99.86%，每秒把 400 万吨物质变成光。" };
+  fun:"占整个太阳系质量的 99.86%，每秒把 400 万吨物质变成光。",
+  hist:"帕克探测器 2024 年 12 月穿入日冕，以 191 km/s 成为首个「触摸」太阳、也是最快的人造物。" };
 
 /* ---------- 彗星 ---------- */
 const comet = {
@@ -414,6 +429,7 @@ const comet = {
   name:"彗星", en:"COMET", dia:"~11 km", per:"~76 年", dist:"0.3 – 30 AU",
   viewZoom: 3.2, note: 1175, omega: 2.0,
   fun:"冰与尘埃构成的「脏雪球」，逼近太阳时升华喷尾，尾巴永远背向太阳。",
+  hist:"2014 年罗塞塔号环绕 67P 彗星，菲莱着陆器完成人类首次彗星登陆。",
 };
 // 椭圆轨道参数化：太阳位于焦点，极坐标直接给出焦点系坐标（随 omega 旋转取向）
 function cometPos() {
@@ -559,16 +575,21 @@ function startPad() {
   padOn = true;
   const t = AC.currentTime;
   const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(0.10, t + 2.5);
-  const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; lp.Q.value = 0.6;
-  // 两个失谐正弦 + 五度，营造深空嗡鸣
-  const oscs = [[55, 0], [55.4, 0], [82.5, -0.02]].map(([f, det]) => {
-    const o = AC.createOscillator(); o.type = "sine"; o.frequency.value = f; o.detune.value = det;
+  g.gain.linearRampToValueAtTime(0.075, t + 2.5);
+  const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1100; lp.Q.value = 0.5;
+  // 基音 A2 + 纯五度 + 高八度:triangle 带泛音,通透空灵;55Hz 纯正弦只会低沉发闷
+  const oscs = [
+    [110,   0, "triangle"],
+    [110.6, 0, "sine"],      // 微失谐 → 缓慢拍频,呼吸感
+    [165,  -4, "sine"],      // 纯五度 E3
+    [220,   4, "sine"],      // 高八度 A3 提亮
+  ].map(([f, det, type]) => {
+    const o = AC.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = det;
     o.connect(lp); o.start(); return o;
   });
   // 缓慢 LFO 呼吸
   const lfo = AC.createOscillator(); lfo.frequency.value = 0.07;
-  const lfoG = AC.createGain(); lfoG.gain.value = 0.035;
+  const lfoG = AC.createGain(); lfoG.gain.value = 0.028;
   lfo.connect(lfoG); lfoG.connect(g.gain); lfo.start();
   lp.connect(g); g.connect(master);
   padNodes = { oscs, lfo, g };
@@ -583,16 +604,23 @@ function stopPad() {
   setTimeout(() => { nodes.oscs.forEach(o => o.stop()); nodes.lfo.stop(); }, 900);
   padNodes = null; padOn = false;
 }
-function sfxBlip(f = 520, dur = 0.18, vol = 0.10) {
+function sfxBlip(f = 520, dur = 0.16, vol = 0.09) {
   if (!AC || !CFG.sound) return;
   const t = AC.currentTime;
-  const o = AC.createOscillator(); o.type = "sine";
-  o.frequency.setValueAtTime(f, t);
-  o.frequency.exponentialRampToValueAtTime(f * 1.5, t + dur);
   const g = AC.createGain();
-  g.gain.setValueAtTime(vol, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.012);          // 极短起音,去掉硬启动的「噗」头
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  // 主体 triangle（自带泛音）+ 高八度 sine 薄层提亮,清脆不闷
+  const o = AC.createOscillator(); o.type = "triangle";
+  o.frequency.setValueAtTime(f * 0.92, t);
+  o.frequency.exponentialRampToValueAtTime(f * 1.4, t + dur * 0.8);
+  const o2 = AC.createOscillator(); o2.type = "sine";
+  o2.frequency.setValueAtTime(f * 1.86, t);
+  o2.frequency.exponentialRampToValueAtTime(f * 2.8, t + dur * 0.8);
+  const g2 = AC.createGain(); g2.gain.value = 0.32;        // 薄层只管亮度,不抬音量
+  o.connect(g); o2.connect(g2); g2.connect(g); g.connect(master);
+  o.start(t); o2.start(t); o.stop(t + dur + 0.02); o2.stop(t + dur + 0.02);
 }
 function sfxWhoosh() {
   if (!AC || !CFG.sound) return;
@@ -1205,6 +1233,7 @@ function fillCard(b) {
   document.getElementById("cPer").textContent = b.per;
   document.getElementById("cDist").textContent = b.dist;
   document.getElementById("cFun").textContent = b.fun;
+  document.getElementById("cHist").textContent = b.hist || "—";
 }
 
 /* ============================================================
