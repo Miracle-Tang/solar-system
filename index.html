@@ -43,16 +43,22 @@
   }
   #brand p { margin-top: 6px; font-size: 12px; letter-spacing: 4px; color: var(--text-dim); }
 
+  /* ---------- 底部停靠区：导航条 + 控制面板 纵向堆叠,高度自适应永不重叠 ---------- */
+  #dock {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 9px;
+    max-width: calc(100vw - 24px); pointer-events: none;
+  }
   /* ---------- 控制面板 ---------- */
   #panel {
-    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
-    z-index: 10; display: flex; align-items: center; gap: 13px;
+    pointer-events: auto; width: max-content; max-width: 100%;
+    display: flex; align-items: center; gap: 8px 12px;
     padding: 11px 18px; border-radius: 18px;
     background: var(--glass); border: 1px solid var(--glass-border);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     box-shadow: 0 8px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
     opacity: 0; animation: fadeIn 1.4s ease .8s forwards;
-    max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center;
+    max-width: 100%; flex-wrap: wrap; justify-content: center;
   }
   #playBtn {
     border: 1px solid var(--glass-border); background: rgba(255,210,125,.10);
@@ -94,6 +100,18 @@
     font-size: 11px; padding: 4px 8px; border-radius: 8px; cursor: pointer; transition: all .2s;
   }
   .jumps button:hover { color: var(--accent); border-color: rgba(255,210,125,.5); }
+  .sep { width: 1px; height: 22px; background: rgba(150,170,255,.16); margin: 0 2px; }
+  #tiltBtn {
+    border: 1px solid var(--glass-border); background: rgba(0,0,0,.25); color: var(--text-dim);
+    font-size: 11.5px; letter-spacing: 1px; padding: 7px 11px; border-radius: 9px;
+    cursor: pointer; transition: all .2s; font-family: inherit;
+  }
+  #tiltBtn:hover { color: var(--accent); border-color: rgba(255,210,125,.5); }
+  #tiltBtn.on {
+    color: #1a1206; font-weight: 600; border-color: transparent;
+    background: linear-gradient(135deg, #ffe3a3, #ffb37d);
+    box-shadow: 0 2px 12px rgba(255,190,110,.35);
+  }
   #fps {
     position: fixed; left: 14px; bottom: 12px; z-index: 10; display: none;
     font-size: 11px; color: var(--text-dim); letter-spacing: 1px; font-variant-numeric: tabular-nums;
@@ -103,13 +121,13 @@
 
   /* ---------- 目标导航条 ---------- */
   #nav {
-    position: fixed; left: 50%; bottom: 94px; transform: translateX(-50%);
-    z-index: 10; display: flex; gap: 5px; padding: 7px 11px; border-radius: 14px;
+    pointer-events: auto; width: max-content; max-width: 100%;
+    display: flex; gap: 5px; padding: 7px 11px; border-radius: 14px;
     background: var(--glass); border: 1px solid var(--glass-border);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     box-shadow: 0 8px 40px rgba(0,0,0,.45);
     opacity: 0; animation: fadeIn 1.4s ease 1.15s forwards;
-    max-width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center;
+    max-width: 100%; flex-wrap: wrap; justify-content: center;
   }
   #nav button {
     border: none; background: transparent; color: var(--text-dim);
@@ -178,10 +196,13 @@
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   @keyframes fadeIn { to { opacity: 1; } }
+  @media (max-width: 1150px) {
+    #card { bottom: 190px; }
+  }
   @media (max-width: 720px) {
     #brand h1 { font-size: 19px; letter-spacing: 4px; }
-    #panel { gap: 9px; padding: 9px 12px; }
-    #card { left: 12px; bottom: 130px; width: 210px; padding: 14px 16px; }
+    #panel { gap: 7px 9px; padding: 9px 12px; }
+    #card { left: 12px; bottom: 300px; width: 210px; padding: 14px 16px; }
   }
 </style>
 </head>
@@ -190,21 +211,27 @@
 
 <div id="brand"><h1>SOLARIS</h1><p>太 阳 系 漫 游 · 点 击 行 星 抵 达</p></div>
 
-<div id="panel">
-  <button id="playBtn" title="暂停 / 播放">❚❚</button>
-  <div class="ctrl"><label>速度</label><input type="range" id="spd" min="0" max="10" step="0.1" value="1"><span id="spdVal">1.0×</span></div>
-  <div class="ctrl"><span id="date">——</span></div>
-  <div class="ctrl jumps">
-    <button id="j1" title="时间前进 1 年">+1年</button>
-    <button id="j10" title="时间前进 10 年">+10年</button>
+<div id="dock">
+  <div id="nav"></div>
+  <div id="panel">
+    <button id="playBtn" title="暂停 / 播放">❚❚</button>
+    <div class="ctrl"><label>速度</label><input type="range" id="spd" min="0" max="10" step="0.1" value="1"><span id="spdVal">1.0×</span></div>
+    <span class="sep"></span>
+    <div class="ctrl"><span id="date">——</span></div>
+    <div class="ctrl jumps">
+      <button id="j1" title="时间前进 1 年">+1年</button>
+      <button id="j10" title="时间前进 10 年">+10年</button>
+    </div>
+    <span class="sep"></span>
+    <div class="ctrl"><label>轨道</label><label class="switch"><input type="checkbox" id="swOrbit" checked><i></i></label></div>
+    <div class="ctrl"><label>标签</label><label class="switch"><input type="checkbox" id="swLabel" checked><i></i></label></div>
+    <div class="ctrl"><label>帧率</label><label class="switch"><input type="checkbox" id="swFps"><i></i></label></div>
+    <div class="ctrl"><label>声音</label><label class="switch"><input type="checkbox" id="swSnd"><i></i></label></div>
+    <span class="sep"></span>
+    <button id="tiltBtn" title="切换 俯视 / 2.5D 斜视角">2.5D</button>
+    <button id="backBtn">返回全景</button>
+    <button id="hintBtn" title="操作说明">?</button>
   </div>
-  <div class="ctrl"><label>轨道</label><label class="switch"><input type="checkbox" id="swOrbit" checked><i></i></label></div>
-  <div class="ctrl"><label>标签</label><label class="switch"><input type="checkbox" id="swLabel" checked><i></i></label></div>
-  <div class="ctrl"><label>帧率</label><label class="switch"><input type="checkbox" id="swFps"><i></i></label></div>
-  <div class="ctrl"><label>声音</label><label class="switch"><input type="checkbox" id="swSnd"><i></i></label></div>
-  <button id="tiltBtn" title="切换 俯视 / 2.5D 斜视角">2.5D</button>
-  <button id="backBtn">返回全景</button>
-  <button id="hintBtn" title="操作说明">?</button>
 </div>
 <div id="fps"></div>
 
@@ -227,8 +254,6 @@
     <button id="helpClose">启程</button>
   </div>
 </div>
-
-<div id="nav"></div>
 
 <div id="tip"></div>
 <div id="card">
