@@ -93,7 +93,14 @@
   }
   #backBtn.show { display: block; }
   #backBtn:hover { background: rgba(125,211,252,.22); }
-  #date { font-size: 12px; letter-spacing: 1.5px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #date { font-size: 12px; letter-spacing: 1.5px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap;
+    cursor: pointer; display: inline-block; border-radius: 6px; }
+  #date:hover { text-shadow: 0 0 10px rgba(255,210,125,.55); }
+  #date.flash { animation: dateFlash .7s ease; }
+  @keyframes dateFlash {
+    0% { color: #fff; text-shadow: 0 0 14px rgba(255,220,150,.95); transform: scale(1.12); }
+    100% { color: var(--accent); transform: none; }
+  }
   .jumps { display: flex; gap: 4px; }
   .jumps button {
     border: 1px solid var(--glass-border); background: rgba(0,0,0,.25); color: var(--text-dim);
@@ -146,6 +153,15 @@
   }
   #hintBtn:hover { color: var(--accent-2); border-color: rgba(125,211,252,.5); }
 
+  /* 按压反馈：所有面板/导航按钮统一微缩 */
+  #panel button:active, #nav button:active { transform: scale(.92); }
+
+  /* ---------- 拖拽漫游时的沉浸模式：UI 让位于画面 ---------- */
+  /* 入场 fadeIn（fill forwards）会压过普通 opacity,动画结束后换成可过渡的普通态 */
+  #brand.uiReady, #nav.uiReady, #panel.uiReady { animation: none; opacity: 1; }
+  #brand, #dock { transition: opacity .5s ease; }
+  body.uiDim #brand, body.uiDim #dock { opacity: .22; }
+
   /* ---------- 帮助 ---------- */
   #help { position: fixed; inset: 0; z-index: 30; display: none;
     align-items: center; justify-content: center;
@@ -176,10 +192,11 @@
     padding: 18px 20px; border-radius: 16px; display: none;
     background: var(--glass); border: 1px solid var(--glass-border);
     backdrop-filter: blur(14px); box-shadow: 0 10px 44px rgba(0,0,0,.5);
-    opacity: 0; transition: opacity .35s ease;
+    opacity: 0; transform: translateY(16px);
+    transition: opacity .35s ease, transform .35s ease;
   }
   #card.show { display: block; }
-  #card.vis { opacity: 1; }
+  #card.vis { opacity: 1; transform: none; }
   #card h3 { font-size: 19px; letter-spacing: 5px; color: var(--accent); margin-bottom: 2px; }
   #card .en { font-size: 11px; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 10px; }
   #card .row { display: flex; justify-content: space-between; font-size: 12px; padding: 3.5px 0;
@@ -201,7 +218,11 @@
   }
   @media (max-width: 720px) {
     #brand h1 { font-size: 19px; letter-spacing: 4px; }
-    #panel { gap: 7px 9px; padding: 9px 12px; }
+    /* 手机端：分组线意义不大,帧率属调试工具,收纳后控制面板单行横滑 */
+    .sep, .fpsCtrl { display: none; }
+    #panel { gap: 7px 9px; padding: 9px 12px; flex-wrap: nowrap; justify-content: flex-start;
+      overflow-x: auto; scrollbar-width: none; }
+    #panel::-webkit-scrollbar { display: none; }
     #card { left: 12px; bottom: 300px; width: 210px; padding: 14px 16px; }
   }
 </style>
@@ -217,7 +238,7 @@
     <button id="playBtn" title="暂停 / 播放">❚❚</button>
     <div class="ctrl"><label>速度</label><input type="range" id="spd" min="0" max="10" step="0.1" value="1"><span id="spdVal">1.0×</span></div>
     <span class="sep"></span>
-    <div class="ctrl"><span id="date">——</span></div>
+    <div class="ctrl"><span id="date" title="模拟日期 · 点击回到今天">——</span></div>
     <div class="ctrl jumps">
       <button id="j1" title="时间前进 1 年">+1年</button>
       <button id="j10" title="时间前进 10 年">+10年</button>
@@ -225,7 +246,7 @@
     <span class="sep"></span>
     <div class="ctrl"><label>轨道</label><label class="switch"><input type="checkbox" id="swOrbit" checked><i></i></label></div>
     <div class="ctrl"><label>标签</label><label class="switch"><input type="checkbox" id="swLabel" checked><i></i></label></div>
-    <div class="ctrl"><label>帧率</label><label class="switch"><input type="checkbox" id="swFps"><i></i></label></div>
+    <div class="ctrl fpsCtrl"><label>帧率</label><label class="switch"><input type="checkbox" id="swFps"><i></i></label></div>
     <div class="ctrl"><label>声音</label><label class="switch"><input type="checkbox" id="swSnd"><i></i></label></div>
     <span class="sep"></span>
     <button id="tiltBtn" title="切换 俯视 / 2.5D 斜视角">2.5D</button>
@@ -239,13 +260,14 @@
   <div id="helpCard">
     <h2>漫游指南</h2>
     <table>
-      <tr><td>滚轮</td><td>缩放整个太阳系（0.4× ~ 10×）</td></tr>
-      <tr><td>拖拽</td><td>平移视角</td></tr>
-      <tr><td>悬停行星</td><td>显示名称标签</td></tr>
+      <tr><td>滚轮 / <kbd>+</kbd><kbd>-</kbd></td><td>缩放视角（0.25× ~ 10×）</td></tr>
+      <tr><td>拖拽</td><td>平移视角（跟随中拖拽会解除跟随）</td></tr>
+      <tr><td>悬停行星 / 导航按钮</td><td>画布内对应天体高亮并显示名称</td></tr>
       <tr><td>点击行星</td><td>镜头飞向并跟随该行星，展示档案</td></tr>
       <tr><td>导航条 / <kbd>←</kbd><kbd>→</kbd></td><td>在 太阳 → 行星 → 彗星 之间随意切换视角</td></tr>
       <tr><td><kbd>V</kbd> / 2.5D 按钮</td><td>俯视全景 ↔ 斜视角 立体切换</td></tr>
       <tr><td>+1年 / +10年</td><td>时间跳跃，观察行星公转</td></tr>
+      <tr><td>点击日期</td><td>回到今天（重置模拟时间轴）</td></tr>
       <tr><td>双指捏合</td><td>触屏设备缩放（与滚轮等效）</td></tr>
       <tr><td><kbd>Esc</kbd> / 空白处</td><td>返回全景视角</td></tr>
       <tr><td><kbd>Space</kbd></td><td>暂停 / 继续时间流动</td></tr>
@@ -318,6 +340,7 @@ let speed = 1, paused = false;
 /* ---------- 交互状态 ---------- */
 const mouse = { x: -1, y: -1, active: false };
 let hoverBody = null;
+let navHover = null;          // 导航条悬停的天体（与画布悬停同效,画布高亮/标签联动）
 let focusBody = null;         // 跟随的天体（null = 全景）
 const drag = { on: false, moved: false, sx: 0, sy: 0, cx: 0, cy: 0 };
 
@@ -381,7 +404,7 @@ BODIES.forEach((b, i) => {
   b.omega = (b.omega || 0) * Math.PI / 180;           // 近日点经度 → 弧度（2.5D 轨道取向）
   b.note = b.note || 660;
 });
-const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"—", dist:"0 AU",
+const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"绕银心 ~2.3 亿年", dist:"0 AU · 万物基准",
   viewZoom: 2.6, note: 220,
   fun:"占整个太阳系质量的 99.86%，每秒把 400 万吨物质变成光。" };
 
@@ -510,7 +533,13 @@ function resize() {
   buildStars();
 }
 let resizeTimer = 0;
-window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(resize, 120); });
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    resize();
+    if (!focusBody) cam.tzoom = fitZoom();   // 全景视角随窗口尺寸重新取景
+  }, 120);
+});
 
 /* ============================================================
    音效（全合成）：氛围垫 + 悬停/点击
@@ -648,10 +677,10 @@ function update(dtSec) {
   cam.zoom = Math.exp(lerp(Math.log(cam.zoom), Math.log(cam.tzoom), k));
   // 2.5D 视角平滑过渡
   tiltCur = lerp(tiltCur, CFG.tilt ? 0.45 : 1, 1 - Math.pow(0.008, dtSec));
-  // 镜头速度 → warp 强度（仅镜头飞向目标时出现速度线，拖拽平移不触发）
+  // 镜头速度 → warp 强度（仅镜头飞向目标时出现速度线，拖拽平移不触发；尊重系统减弱动效）
   const camSpd = Math.hypot(cam.x - warp.prevX, cam.y - warp.prevY) * cam.zoom;
   warp.prevX = cam.x; warp.prevY = cam.y;
-  const warpTarget = focusBody ? clamp((camSpd - 30) / 260, 0, 1) : 0;
+  const warpTarget = (focusBody && !REDUCE_MOTION) ? clamp((camSpd - 30) / 260, 0, 1) : 0;
   warp.amt = lerp(warp.amt, warpTarget, 1 - Math.pow(0.008, dtSec));
 
   // 悬停检测（屏幕空间，即时拾取）
@@ -724,6 +753,7 @@ function updateCometTail(c, dtSec, dtEff) {
    ============================================================ */
 function render(now) {
   ctx.clearRect(0, 0, W, H);
+  const hb = hoverBody || navHover;      // 画布悬停与导航条悬停同效
 
   /* --- 星空视差 --- */
   for (const L of starLayers) {
@@ -756,12 +786,12 @@ function render(now) {
       ctx.closePath();
     };
     for (const b of BODIES) {
-      ctx.strokeStyle = hoverBody === b ? "rgba(255, 214, 150, 0.42)" : "rgba(150, 170, 230, 0.13)";
+      ctx.strokeStyle = hb === b ? "rgba(255, 214, 150, 0.42)" : "rgba(150, 170, 230, 0.13)";
       orbitPath(b.r, b.omega);
       ctx.stroke();
     }
     // 彗星轨道
-    ctx.strokeStyle = hoverBody === comet ? "rgba(140, 220, 250, 0.38)" : "rgba(120, 200, 235, 0.10)";
+    ctx.strokeStyle = hb === comet ? "rgba(140, 220, 250, 0.38)" : "rgba(120, 200, 235, 0.10)";
     const cO = comet.omega, ca = comet.a, ce = comet.e;
     ctx.beginPath();
     for (let i = 0; i <= ORB_SEGS; i++) {
@@ -862,16 +892,16 @@ function render(now) {
       const p = focusPos(b);
       const s = w2s(p.x, p.y);
       if (s.x < -40 || s.x > W + 40 || s.y < -20 || s.y > H + 20) continue;
-      ctx.fillStyle = hoverBody === b ? "rgba(255, 225, 160, .95)" : "rgba(190, 205, 245, .55)";
+      ctx.fillStyle = hb === b ? "rgba(255, 225, 160, .95)" : "rgba(190, 205, 245, .55)";
       ctx.fillText(b.name, s.x, s.y - Math.max(b.size * cam.zoom, 8) - 9);
     }
   }
 
   /* --- 悬停光环 --- */
-  if (hoverBody) {
-    const wp = focusPos(hoverBody);
+  if (hb) {
+    const wp = focusPos(hb);
     const s = w2s(wp.x, wp.y);
-    const rr = Math.max((hoverBody.size || sun.size) * cam.zoom, 9) + 9;
+    const rr = Math.max((hb.size || sun.size) * cam.zoom, 9) + 9;
     ctx.strokeStyle = "rgba(255, 220, 150, 0.75)";
     ctx.lineWidth = 1.2;
     ctx.setLineDash([4, 5]);
@@ -1128,6 +1158,7 @@ function drawSun(now) {
    DOM 同步（标签 / 信息卡）
    ============================================================ */
 const CFG = { orbits: true, labels: true, sound: false, tilt: false, fps: false };
+const REDUCE_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;   // 系统级减弱动效
 let startEpoch = Date.now();      // 日期系统基准：打开页面那一刻
 let fpsShown = 0;
 const tip = document.getElementById("tip");
@@ -1135,13 +1166,14 @@ const card = document.getElementById("card");
 let cardShownFor = null;
 
 function syncDom() {
+  const hb = hoverBody || navHover;      // 与 render 同管道:导航悬停也出标签
   // 悬停 tip（聚焦跟随对象不显示 tip）
-  if (hoverBody && hoverBody !== focusBody) {
-    const s = w2s(focusPos(hoverBody).x, focusPos(hoverBody).y);
+  if (hb && hb !== focusBody) {
+    const s = w2s(focusPos(hb).x, focusPos(hb).y);
     tip.style.display = "block";
     tip.style.left = s.x + "px";
     tip.style.top = s.y + "px";
-    tip.textContent = hoverBody.name + " · " + hoverBody.en;
+    tip.textContent = hb.name + " · " + hb.en;
   } else {
     tip.style.display = "none";
   }
@@ -1201,6 +1233,7 @@ canvas.addEventListener("pointermove", e => {
   if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   // 双指捏合缩放：以两指中点为锚
   if (activePointers.size === 2 && pinchBase) {
+    document.body.classList.add("uiDim");
     const pts = [...activePointers.values()];
     const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
@@ -1215,7 +1248,7 @@ canvas.addEventListener("pointermove", e => {
   mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true;
   if (drag.on) {
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
-    if (Math.hypot(dx, dy) > 4) drag.moved = true;
+    if (Math.hypot(dx, dy) > 4 && !drag.moved) { drag.moved = true; document.body.classList.add("uiDim"); }
     if (drag.moved && !focusBody) {
       cam.tx = cam.x = drag.cx - dx / cam.zoom;
       cam.ty = cam.y = drag.cy - dy / cam.zoom;
@@ -1230,11 +1263,11 @@ canvas.addEventListener("pointermove", e => {
 function pointerReleased(e) {
   activePointers.delete(e.pointerId);
   if (activePointers.size < 2) pinchBase = null;
-  if (activePointers.size === 0) drag.on = false;
+  if (activePointers.size === 0) { drag.on = false; document.body.classList.remove("uiDim"); }
 }
 window.addEventListener("pointerup", pointerReleased);
 window.addEventListener("pointercancel", pointerReleased);
-canvas.addEventListener("pointerleave", () => { mouse.active = false; drag.on = false; });
+canvas.addEventListener("pointerleave", () => { mouse.active = false; drag.on = false; document.body.classList.remove("uiDim"); });
 
 canvas.addEventListener("click", e => {
   if (drag.moved) return;
@@ -1265,12 +1298,15 @@ function setFocus(b, keepCam = false) {
     fx.push({ type: "lock", body: b, t: 0 });     // 目标锁定动画
     sfxWhoosh();
     sfxBlip(b.note || 660, 0.3, 0.09);            // 每个天体一个音高，切换如弹音阶
-    showToast("正在前往 " + b.name + " · ←/→ 切换目标");
+    // 操作提示只带第一次,之后不啰嗦
+    showToast("正在前往 " + b.name + (moveHintShown ? "" : " · ←/→ 切换目标"));
+    moveHintShown = true;
   } else if (!keepCam) {
     cam.tx = 0; cam.ty = 0; cam.tzoom = fitZoom();
     sfxBlip(420);
   }
 }
+let moveHintShown = false;
 
 function fitZoom() {
   return clamp(Math.min(W, H) / 860, 0.5, 1.6);   // 默认更近：土星轨道撑满画面
@@ -1281,6 +1317,8 @@ window.addEventListener("keydown", e => {
   if (e.code === "Space") { e.preventDefault(); togglePause(); }
   else if (e.key === "Escape") setFocus(null);
   else if (e.key === "v" || e.key === "V") document.getElementById("tiltBtn").click();
+  else if (e.key === "+" || e.key === "=") cam.tzoom = clamp(cam.tzoom * 1.3, ZMIN, ZMAX);   // 围绕焦点推近
+  else if (e.key === "-" || e.key === "_") cam.tzoom = clamp(cam.tzoom / 1.3, ZMIN, ZMAX);
   else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
     // 在 太阳 → 行星 → 彗星 之间循环切换视角
     e.preventDefault();
@@ -1301,11 +1339,11 @@ function togglePause() {
 /* ---------- UI 绑定 ---------- */
 const toast = document.getElementById("toast");
 let toastTimer = 0;
-function showToast(msg) {
+function showToast(msg, dur = 1500) {
   toast.textContent = msg;
   toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 1500);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), dur);
 }
 
 document.getElementById("playBtn").addEventListener("click", togglePause);
@@ -1314,14 +1352,26 @@ document.getElementById("spd").addEventListener("input", e => {
   document.getElementById("spdVal").textContent = speed.toFixed(1) + "×";
   saveSettings();
 });
-// 时间跳跃：+1 / +10 年（行星位置跳变，日期同步）
+// 时间跳跃：+1 / +10 年（行星位置跳变,日期同步闪烁提示）
+const dateEl = document.getElementById("date");
+function flashDate() {
+  dateEl.classList.remove("flash"); void dateEl.offsetWidth; dateEl.classList.add("flash");
+}
 document.getElementById("j1").addEventListener("click", () => jumpYears(1));
 document.getElementById("j10").addEventListener("click", () => jumpYears(10));
 function jumpYears(n) {
   simT += n;
   showToast(`时间前进 ${n} 年`);
   sfxBlip(520 + n * 60);
+  flashDate();
 }
+// 点击日期 = 回到今天（重置模拟时间轴）
+dateEl.addEventListener("click", () => {
+  startEpoch = Date.now(); simT = 0;
+  showToast("回到今天");
+  sfxBlip(660);
+  flashDate();
+});
 document.getElementById("swOrbit").addEventListener("change", e => { CFG.orbits = e.target.checked; saveSettings(); });
 document.getElementById("swLabel").addEventListener("change", e => { CFG.labels = e.target.checked; saveSettings(); });
 document.getElementById("swFps").addEventListener("change", e => {
@@ -1405,7 +1455,7 @@ function tick(now) {
   // 日期显示（每 12 帧刷新一次足够）
   if (++dateTick % 12 === 0) {
     const d = new Date(startEpoch + simT * 365.25 * 86400000);
-    document.getElementById("date").textContent =
+    dateEl.textContent =
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
   update(rawDt);
@@ -1426,11 +1476,31 @@ cam.tzoom = fitZoom();
   focusOrder().forEach((b, i) => {
     const btn = document.createElement("button");
     btn.textContent = b.name;
+    btn.title = b.en;
     btn.dataset.i = i;
     btn.addEventListener("click", () => { ensureAudio(); setFocus(b); });
+    // 悬停导航按钮 = 画布内对应天体高亮（轨道/标签/光环联动）
+    btn.addEventListener("pointerenter", () => { navHover = b; });
+    btn.addEventListener("pointerleave", () => { if (navHover === b) navHover = null; });
     nav.appendChild(btn);
   });
 })();
+// 入场 fadeIn（fill forwards）结束后转普通态,让沉浸淡出/恢复可以平滑过渡
+for (const id of ["brand", "nav", "panel"]) {
+  const el = document.getElementById(id);
+  el.addEventListener("animationend", function onEnd(e) {
+    if (e.target !== el) return;           // 忽略其他元素动画冒泡
+    el.classList.add("uiReady");
+    el.removeEventListener("animationend", onEnd);
+  });
+}
+// 首次访问：开场稳定后给一句操作引导（localStorage 去重）
+try {
+  if (!localStorage.getItem("solaris-hint-v1")) {
+    setTimeout(() => showToast("点击行星抵达 · 拖拽平移 · 滚轮缩放 · ? 查看指南", 3600), 3400);
+    localStorage.setItem("solaris-hint-v1", "1");
+  }
+} catch (e) { /* 隐私模式下静默跳过 */ }
 requestAnimationFrame(tick);
 
 // 只读调试/自动化接口（不影响行为）

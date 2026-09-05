@@ -25,19 +25,20 @@
 - **Details**: Saturn's 3-layer rings with occlusion, Jupiter's bands & Great Red Spot, asteroid belt (760), Kuiper belt (520)
 - **Comet**: elliptical focus orbit (dθ/dt ∝ 1/r², accelerates at perihelion), anti-solar tail that brightens near the Sun, perihelion flash easter egg
 - **Sun**: pulsing multi-layer corona, eruptive prominences, solar wind particles
-- **Interaction**: click any body to fly & follow (lock animation, warp streaks on long jumps, dossier card); nav bar / `←` `→` cycling across 11 targets with a pentatonic note per body; wheel / pinch zoom (0.25×–10×); simulated date + `+1y / +10y` time jumps; `V` toggles 2.5D; settings persist via localStorage; auto-mute when tab is hidden
+- **Interaction**: click any body to fly & follow (lock animation, warp streaks on long jumps, dossier card); nav bar / `←` `→` cycling across 11 targets with a pentatonic note per body (hovering a nav button highlights that body on canvas); wheel / `+` `−` / pinch zoom (0.25×–10×); drag pans with UI fading out for immersion; simulated date (click to reset to today) + `+1y / +10y` time jumps; `V` toggles 2.5D; settings persist via localStorage; auto-mute when tab is hidden; honors `prefers-reduced-motion`
 - **Audio**: 100% synthesized with Web Audio (ambient pad, whoosh, blips)
 
 ## 🕹 Controls
 
 | Input | Action |
 |---|---|
-| Wheel / pinch | Zoom (0.25×–10×) |
-| Drag | Pan |
+| Wheel / `+` `−` / pinch | Zoom (0.25×–10×) |
+| Drag | Pan (UI fades out while dragging) |
 | Click a body | Fly, follow & show dossier |
-| Nav bar / `←` `→` | Switch target |
+| Nav bar / `←` `→` | Switch target (hover to preview-highlight it on canvas) |
 | `V` / 2.5D button | Toggle top-down ↔ tilted |
 | `+1y` `+10y` | Time jump |
+| Click the date | Back to today |
 | `Esc` / click empty | Return to overview |
 | `Space` | Pause |
 
