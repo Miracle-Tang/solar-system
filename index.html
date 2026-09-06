@@ -156,6 +156,19 @@
   /* 按压反馈：所有面板/导航按钮统一微缩 */
   #panel button:active, #nav button:active { transform: scale(.92); }
 
+  /* 系统开启「减弱动态效果」：入场动画与过渡瞬时完成(JS 侧同时关闭曲速线) */
+  @media (prefers-reduced-motion: reduce) {
+    #brand, #panel, #nav { animation-duration: .01s; animation-delay: 0s; }
+    #brand, #dock, #card { transition-duration: .01s; }
+  }
+  /* 触屏设备：放大开关与导航按钮的命中区域 */
+  @media (pointer: coarse) {
+    .switch { width: 42px; height: 22px; }
+    .switch i::after { top: 3px; left: 3px; width: 14px; height: 14px; }
+    .switch input:checked + i::after { left: 25px; }
+    #nav button { padding: 8px 12px; }
+  }
+
   /* ---------- 拖拽漫游时的沉浸模式：UI 让位于画面 ---------- */
   /* 入场 fadeIn（fill forwards）会压过普通 opacity,动画结束后换成可过渡的普通态 */
   #brand.uiReady, #nav.uiReady, #panel.uiReady { animation: none; opacity: 1; }
@@ -206,7 +219,7 @@
   #card .fun::before { content: "✦ "; color: var(--accent); }
   #card .hist { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgba(150,170,255,.14);
     font-size: 11.5px; line-height: 1.65; color: #a9bfe4; }
-  #card .hist::before { content: "🛰 探 测 史"; display: block; margin-bottom: 4px;
+  #card .hist::before { content: "🛰️ 探 测 史"; display: block; margin-bottom: 4px;
     font-size: 10px; letter-spacing: 2px; color: var(--text-dim); }
 
   #toast { position: fixed; top: 26px; left: 50%; z-index: 20;
@@ -870,10 +883,10 @@ function render(now) {
     (bodyPos(p1).y * tiltCur) - (bodyPos(p2).y * tiltCur));
   for (const b of drawList) {
     const p = bodyPos(b);
-    // 运动方向拖尾弧（细而淡，仅作方向感）
-    if (CFG.orbits) {
+    // 运动方向拖尾弧（细而淡，仅作方向感）；时间冻结/流速 0 时不画,避免静止残影
+    if (CFG.orbits && !paused && speed > 0) {
       const dirSign = Math.sign(b.angSpd);
-      const streak = clamp(0.55 * speed * (paused ? 0 : 1), 0.06, 0.9);
+      const streak = clamp(0.55 * speed, 0.06, 0.9);
       const segs = 24;
       let prev = null;
       for (let i = 0; i <= segs; i++) {
@@ -915,13 +928,19 @@ function render(now) {
   if (CFG.labels) {
     ctx.font = "11px 'Segoe UI', 'Microsoft YaHei', sans-serif";
     ctx.textAlign = "center";
-    const labeled = [...BODIES, comet];
+    // 标签防重叠：视角拉远时内行星标签会挤成一团——按屏幕间距去重,当前目标/悬停对象优先显示
+    const prio = [focusBody, hb].filter(Boolean);
+    const labeled = [...new Set([...prio, ...BODIES, comet])];
+    const placed = [];
     for (const b of labeled) {
       const p = focusPos(b);
       const s = w2s(p.x, p.y);
       if (s.x < -40 || s.x > W + 40 || s.y < -20 || s.y > H + 20) continue;
+      const ly = s.y - Math.max(b.size * cam.zoom, 8) - 9;
+      if (!prio.includes(b) && placed.some(q => Math.abs(q[0] - s.x) < 30 && Math.abs(q[1] - ly) < 12)) continue;
+      placed.push([s.x, ly]);
       ctx.fillStyle = hb === b ? "rgba(255, 225, 160, .95)" : "rgba(190, 205, 245, .55)";
-      ctx.fillText(b.name, s.x, s.y - Math.max(b.size * cam.zoom, 8) - 9);
+      ctx.fillText(b.name, s.x, ly);
     }
   }
 
@@ -1191,7 +1210,9 @@ let startEpoch = Date.now();      // 日期系统基准：打开页面那一刻
 let fpsShown = 0;
 const tip = document.getElementById("tip");
 const card = document.getElementById("card");
+const backBtnEl = document.getElementById("backBtn");
 let cardShownFor = null;
+let navDirty = true;              // 导航高亮只在焦点变化时同步,避免每帧操作 DOM
 
 function syncDom() {
   const hb = hoverBody || navHover;      // 与 render 同管道:导航悬停也出标签
@@ -1205,7 +1226,7 @@ function syncDom() {
   } else {
     tip.style.display = "none";
   }
-  // 信息卡
+  // 信息卡（焦点变化时才动 DOM）
   if (focusBody !== cardShownFor) {
     if (focusBody) {
       fillCard(focusBody);
@@ -1215,13 +1236,16 @@ function syncDom() {
       card.classList.remove("vis");
       setTimeout(() => card.classList.remove("show"), 350);
     }
+    backBtnEl.classList.toggle("show", !!focusBody);
     cardShownFor = focusBody;
+    navDirty = true;
   }
-  document.getElementById("backBtn").classList.toggle("show", !!focusBody);
   syncNav();
 }
-// 导航条高亮同步
+// 导航条高亮同步（脏标记:无变化时零 DOM 操作）
 function syncNav() {
+  if (!navDirty) return;
+  navDirty = false;
   const order = focusOrder();
   document.querySelectorAll("#nav button").forEach(btn =>
     btn.classList.toggle("on", order[+btn.dataset.i] === focusBody));
@@ -1302,8 +1326,8 @@ canvas.addEventListener("click", e => {
   if (drag.moved) return;
   ensureAudio();
   const hit = pickBody(e.clientX, e.clientY);      // 即时命中，不依赖上一帧悬停
-  if (hit) setFocus(hit);
-  else if (focusBody) setFocus(null);
+  if (hit && hit !== focusBody) setFocus(hit);     // 重复点击当前目标不重播飞行
+  else if (!hit && focusBody) setFocus(null);
 });
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
@@ -1320,6 +1344,7 @@ canvas.addEventListener("wheel", e => {
 
 function setFocus(b, keepCam = false) {
   focusBody = b;
+  navDirty = true;
   if (b) {
     const p = focusPos(b);
     cam.tx = p.x; cam.ty = p.y * tiltCur;
@@ -1343,6 +1368,10 @@ function fitZoom() {
 
 window.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT") return;
+  if (help.classList.contains("show")) {
+    if (e.key === "Escape") help.classList.remove("show");
+    return;                                   // 弹层打开时,快捷键不穿透到画布
+  }
   if (e.code === "Space") { e.preventDefault(); togglePause(); }
   else if (e.key === "Escape") setFocus(null);
   else if (e.key === "v" || e.key === "V") document.getElementById("tiltBtn").click();
@@ -1507,7 +1536,7 @@ cam.tzoom = fitZoom();
     btn.textContent = b.name;
     btn.title = b.en;
     btn.dataset.i = i;
-    btn.addEventListener("click", () => { ensureAudio(); setFocus(b); });
+    btn.addEventListener("click", () => { ensureAudio(); if (focusBody !== b) setFocus(b); });
     // 悬停导航按钮 = 画布内对应天体高亮（轨道/标签/光环联动）
     btn.addEventListener("pointerenter", () => { navHover = b; });
     btn.addEventListener("pointerleave", () => { if (navHover === b) navHover = null; });
