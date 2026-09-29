@@ -297,8 +297,10 @@
 <div id="tip"></div>
 <div id="card">
   <h3 id="cName">—</h3><div class="en" id="cEn">—</div>
+  <div class="row"><span>类型</span><span id="cType">—</span></div>
   <div class="row"><span>直径</span><span id="cDia">—</span></div>
   <div class="row"><span>公转周期</span><span id="cPer">—</span></div>
+  <div class="row"><span>自转周期</span><span id="cSpin">—</span></div>
   <div class="row"><span>距太阳</span><span id="cDist">—</span></div>
   <div class="fun" id="cFun">—</div>
   <div class="hist" id="cHist">—</div>
@@ -353,6 +355,7 @@ const solarWind = [];
 
 /* ---------- 时间 ---------- */
 let simT = 0;                 // 模拟时间（年）
+let animT = 0;                // 动画时钟（秒）：暂停时冻结,但不随速度倍增——太阳呼吸/耀斑/条纹摆动等"活性"用
 let speed = 1, paused = false;
 
 /* ---------- 交互状态 ---------- */
@@ -367,32 +370,33 @@ const drag = { on: false, moved: false, sx: 0, sy: 0, cx: 0, cy: 0 };
    omega: 真实近日点经度（度），用于 2.5D 下轨道取向错落
    note:  目标音阶频率（切目标时播放） */
 const BODIES = [
-  { id:"mercury", name:"水星", en:"MERCURY", r:  78, size: 3.4, dia:"4,879 km", per:"88 天",  dist:"0.39 AU",
+  { id:"mercury", name:"水星", en:"MERCURY", r:  78, size: 3.4, dia:"4,879 km", per:"88 天",  dist:"0.39 AU", type:"岩质行星", spin:"58.6 天",
     base:"#b8a798", dark:"#4a4038", glow:null, omega: 77.5, note: 440,
     marks:[[0.2,0.2,0.18,0.18,"#8a7f72",0.5],[0.65,-0.25,0.14,0.14,"#8a7f72",0.45],[0.45,-0.4,0.1,0.1,"#938879",0.4]],
     fun:"最小也最神秘的行星，一天比一年还长。",
     hist:"水手 10 号 1974 年首次飞掠；信使号 2011–15 年环绕测绘；贝皮可伦坡号 2026 年底入轨。" },
-  { id:"venus",   name:"金星", en:"VENUS",   r: 112, size: 5.6, dia:"12,104 km", per:"225 天", dist:"0.72 AU",
+  { id:"venus",   name:"金星", en:"VENUS",   r: 112, size: 5.6, dia:"12,104 km", per:"225 天", dist:"0.72 AU", type:"岩质行星", spin:"243 天（逆行）",
     base:"#f0d9a8", dark:"#7a5f3a", glow:"rgba(255,220,150,.16)", omega: 131.5, note: 494,
     marks:[[0.25,0,0.6,0.22,"#fff2cf",0.28],[0.7,0.3,0.5,0.2,"#e8c890",0.25]],
     fun:"温室效应失控的世界，表面 464°C，还是逆向自转。",
     hist:"金星 7 号 1970 年完成首次地外天体软着陆；麦哲伦号用雷达揭开浓云之下的地表。" },
-  { id:"earth",   name:"地球", en:"EARTH",   r: 150, size: 6.0, dia:"12,742 km", per:"365 天", dist:"1.00 AU",
+  { id:"earth",   name:"地球", en:"EARTH",   r: 150, size: 6.0, dia:"12,742 km", per:"365 天", dist:"1.00 AU", type:"岩质行星", spin:"23.9 小时",
     base:"#6fb7e8", dark:"#123a6e", glow:"rgba(120,190,255,.22)", omega: 103, note: 523,
     marks:[[0.15,0.1,0.55,0.5,"#3f8f4f",0.55],[0.55,-0.35,0.4,0.35,"#4a9a58",0.5],[0.82,0.35,0.45,0.4,"#3a8a4a",0.5]],
+    clouds:[[0.08,-0.18,0.5,0.15,"#ffffff",0.42],[0.4,0.22,0.42,0.13,"#ffffff",0.36],[0.7,-0.32,0.34,0.11,"#ffffff",0.32],[0.92,0.05,0.3,0.1,"#ffffff",0.3]],
     cap:true,
     fun:"目前已知唯一存在生命的星球，也是我们的一切。",
     hist:"不必派探测器——我们就住在这里。1961 年加加林成为第一个从太空回望全貌的人类。",
     moons:[{ r: 13, size: 1.7, period: 0.25, base:"#c9c9d4", dark:"#555560" }] },
-  { id:"mars",    name:"火星", en:"MARS",    r: 192, size: 4.6, dia:"6,779 km", per:"687 天", dist:"1.52 AU",
+  { id:"mars",    name:"火星", en:"MARS",    r: 192, size: 4.6, dia:"6,779 km", per:"687 天", dist:"1.52 AU", type:"岩质行星", spin:"24.6 小时",
     base:"#e8825a", dark:"#6e2c1a", glow:"rgba(255,140,100,.12)", omega: 336, note: 587,
     marks:[[0.3,0.15,0.5,0.3,"#8a3c22",0.4],[0.7,-0.3,0.35,0.25,"#7a3220",0.35]], cap:true,
     fun:"奥林帕斯山高约 22 km，是太阳系最高的山峰。",
     hist:"海盗 1 号 1976 年首次着陆；如今毅力号与直升机机智号仍在杰泽罗陨石坑工作。" },
-  { id:"jupiter", name:"木星", en:"JUPITER", r: 268, size: 15,  dia:"139,820 km", per:"11.9 年", dist:"5.20 AU",
+  { id:"jupiter", name:"木星", en:"JUPITER", r: 268, size: 15,  dia:"139,820 km", per:"11.9 年", dist:"5.20 AU", type:"气态巨行星", spin:"9.9 小时",
     base:"#e8c39a", dark:"#7a4a2c", glow:null, omega: 14.7, note: 659,
-    bands: true, spot: true,
-    marks:[[0.3,-0.45,0.3,0.12,"#f0e0c8",0.4],[0.75,0.4,0.25,0.1,"#e8d0b0",0.35]],
+    bands: true,
+    marks:[[0.3,-0.45,0.3,0.12,"#f0e0c8",0.4],[0.75,0.4,0.25,0.1,"#e8d0b0",0.35],[0.67,0.3,0.22,0.13,"#c2523a",0.5]],
     fun:"大红斑是一场持续了至少 350 年的风暴，能装下整个地球。",
     hist:"旅行者号 1979 年拍下大红斑特写；伽利略号 1995–2003 年环绕；朱诺号至今仍在勘察。",
     moons:[
@@ -401,23 +405,23 @@ const BODIES = [
       { r: 32, size: 1.5, period: 0.32, base:"#c8b890", dark:"#5a4a32" },
       { r: 39, size: 1.3, period: 0.6,  base:"#b0a898", dark:"#4a4438" },
     ] },
-  { id:"saturn",  name:"土星", en:"SATURN",  r: 340, size: 12.5,dia:"116,460 km", per:"29.5 年", dist:"9.58 AU",
+  { id:"saturn",  name:"土星", en:"SATURN",  r: 340, size: 12.5,dia:"116,460 km", per:"29.5 年", dist:"9.58 AU", type:"气态巨行星", spin:"10.7 小时",
     base:"#eeddb2", dark:"#8a6f42", glow:null, omega: 92.4, note: 784,
     marks:[[0.3,0.1,0.55,0.16,"#d8c090",0.3],[0.75,-0.3,0.45,0.14,"#c8b080",0.25]],
     ring: true,
     fun:"平均密度比水还低——如果有足够大的浴缸，它能浮起来。",
     hist:"卡西尼号 2004–2017 年环绕十三年，最终冲入土星大气化作流星谢幕；惠更斯号则登陆了土卫六。" },
-  { id:"uranus",  name:"天王星", en:"URANUS", r: 408, size: 9,  dia:"50,724 km", per:"84 年",  dist:"19.2 AU",
+  { id:"uranus",  name:"天王星", en:"URANUS", r: 408, size: 9,  dia:"50,724 km", per:"84 年",  dist:"19.2 AU", type:"冰巨行星", spin:"17.2 小时（侧躺）",
     base:"#a8e6e2", dark:"#2c6a72", glow:"rgba(150,235,230,.14)", omega: 171, note: 880,
     ring: { rot: -1.32, thin: true },
     fun:"自转轴倾斜 98°，几乎是「躺着」绕太阳滚动。",
     hist:"1986 年旅行者 2 号迄今唯一一次到访——短短几小时飞掠，改写了我们对它的全部认知。" },
-  { id:"neptune", name:"海王星", en:"NEPTUNE", r: 470, size: 8.6,dia:"49,244 km", per:"164.8 年", dist:"30.1 AU",
+  { id:"neptune", name:"海王星", en:"NEPTUNE", r: 470, size: 8.6,dia:"49,244 km", per:"164.8 年", dist:"30.1 AU", type:"冰巨行星", spin:"16.1 小时",
     base:"#6f8fe8", dark:"#1c2a6e", glow:"rgba(120,150,255,.16)", omega: 45, note: 988,
     marks:[[0.35,0.05,0.3,0.18,"#2a3a9a",0.6]],
     fun:"风速可达 2,100 km/h，是太阳系最狂暴的大气。",
     hist:"1989 年旅行者 2 号飞掠，至今仍是唯一访客，它带回的特写仍是海王星最好的照片。" },
-  { id:"pluto",   name:"冥王星", en:"PLUTO",  r: 530, size: 2.2, dia:"2,376 km", per:"248 年", dist:"39.5 AU",
+  { id:"pluto",   name:"冥王星", en:"PLUTO",  r: 530, size: 2.2, dia:"2,376 km", per:"248 年", dist:"39.5 AU", type:"矮行星", spin:"6.4 天",
     base:"#cbb8a0", dark:"#5a4a3a", glow:null, omega: 224, note: 1046,
     marks:[[0.4,0.1,0.45,0.3,"#b09a80",0.4],[0.25,-0.3,0.2,0.2,"#e8dcc8",0.3]],
     fun:"2006 年被「降级」为矮行星，但心形冰原让它始终最受欢迎。",
@@ -432,6 +436,7 @@ BODIES.forEach((b, i) => {
   b.note = b.note || 660;
 });
 const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"绕银心 ~2.3 亿年", dist:"0 AU · 万物基准",
+  type:"G2V 黄矮星", spin:"~25 天（赤道）",
   viewZoom: 2.6, note: 220,
   fun:"占整个太阳系质量的 99.86%，每秒把 400 万吨物质变成光。",
   hist:"帕克探测器 2024 年 12 月穿入日冕，以 191 km/s 成为首个「触摸」太阳、也是最快的人造物。" };
@@ -440,6 +445,7 @@ const sun = { name:"太阳", en:"SOL", size: 30, dia:"1,392,700 km", per:"绕银
 const comet = {
   a: 300, e: 0.7, ang: rand(0, TAU), size: 2.2,
   name:"彗星", en:"COMET", dia:"~11 km", per:"~76 年", dist:"0.3 – 30 AU",
+  type:"冰尘天体", spin:"数小时",
   viewZoom: 3.2, note: 1175, omega: 2.0,
   fun:"冰与尘埃构成的「脏雪球」，逼近太阳时升华喷尾，尾巴永远背向太阳。",
   hist:"2014 年罗塞塔号环绕 67P 彗星，菲莱着陆器完成人类首次彗星登陆。",
@@ -484,8 +490,19 @@ const kuiper = [];
 
 /* ---------- 星空层（预渲染 + 视差） ---------- */
 const starLayers = [];
+// 固定种子伪随机:窗口 resize 重建星空时布局比例不变,星星不会"洗牌"跳动
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
 function buildStars() {
   starLayers.length = 0;
+  const rng = mulberry32(20260902);
+  const rr = (a, b) => a + rng() * (b - a);
   const defs = [
     { n: 190, f: 0.030, sMin: 0.4, sMax: 1.0, alpha: 0.5 },
     { n: 120, f: 0.070, sMin: 0.7, sMax: 1.5, alpha: 0.75 },
@@ -499,31 +516,31 @@ function buildStars() {
     if (d.f === 0.030) {
       const bandN = 46;
       for (let i = 0; i < bandN; i++) {
-        const t = i / bandN + rand(-0.03, 0.03);
+        const t = i / bandN + rr(-0.03, 0.03);
         const bx = t * W * 1.2 - W * 0.1;
-        const by = H * 0.72 - t * H * 0.5 + rand(-H * 0.07, H * 0.07);
-        const br = rand(60, 170);
-        const hue = Math.random() < 0.55 ? "255, 225, 190" : "170, 190, 255";
+        const by = H * 0.72 - t * H * 0.5 + rr(-H * 0.07, H * 0.07);
+        const br = rr(60, 170);
+        const hue = rng() < 0.55 ? "255, 225, 190" : "170, 190, 255";
         const gg = g.createRadialGradient(bx, by, 0, bx, by, br);
-        gg.addColorStop(0, `rgba(${hue}, ${rand(0.020, 0.050)})`);
+        gg.addColorStop(0, `rgba(${hue}, ${rr(0.020, 0.050)})`);
         gg.addColorStop(1, "rgba(0,0,0,0)");
         g.fillStyle = gg;
         g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill();
       }
       for (let i = 0; i < 260; i++) {
-        const t = Math.random();
+        const t = rng();
         const bx = t * W * 1.2 - W * 0.1;
-        const by = H * 0.72 - t * H * 0.5 + rand(-H * 0.09, H * 0.09);
-        g.globalAlpha = rand(0.10, 0.42);
+        const by = H * 0.72 - t * H * 0.5 + rr(-H * 0.09, H * 0.09);
+        g.globalAlpha = rr(0.10, 0.42);
         g.fillStyle = "#e8e4ff";
-        g.fillRect(bx, by, rand(0.5, 1.1), rand(0.5, 1.1));
+        g.fillRect(bx, by, rr(0.5, 1.1), rr(0.5, 1.1));
       }
       g.globalAlpha = 1;
     }
     for (let i = 0; i < d.n; i++) {
-      const x = rand(0, W), y = rand(0, H), s = rand(d.sMin, d.sMax);
-      const hue = pickStarColor();
-      g.globalAlpha = d.alpha * rand(0.4, 1);
+      const x = rr(0, W), y = rr(0, H), s = rr(d.sMin, d.sMax);
+      const hue = pickStarColor(rng);
+      g.globalAlpha = d.alpha * rr(0.4, 1);
       g.fillStyle = hue;
       g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
       if (s > 1.6) { g.globalAlpha *= 0.25; g.beginPath(); g.arc(x, y, s * 2.4, 0, TAU); g.fill(); }
@@ -531,8 +548,8 @@ function buildStars() {
     starLayers.push({ canvas: c, f: d.f });
   }
 }
-function pickStarColor() {
-  const t = Math.random();
+function pickStarColor(rng) {
+  const t = rng();
   return t < 0.62 ? "#cdd8ff" : t < 0.85 ? "#ffffff" : t < 0.95 ? "#ffe3c4" : "#ffc4d4";
 }
 
@@ -677,6 +694,7 @@ let lastT = performance.now();
 
 function update(dtSec) {
   const dt = paused ? 0 : dtSec * speed;
+  animT += paused ? 0 : dtSec;
   // simT 单位 = 年。地球一圈 16.67s（speed=1）= 1 年，日期与公转同步
   simT += dt * 0.06;
   for (const b of BODIES) b.ang += b.angSpd * dt;
@@ -828,6 +846,7 @@ function render(now) {
     };
     for (const b of BODIES) {
       ctx.strokeStyle = hb === b ? "rgba(255, 214, 150, 0.42)" : "rgba(150, 170, 230, 0.13)";
+      ctx.lineWidth = hb === b ? 1.8 / cam.zoom : 1 / cam.zoom;   // 悬停轨道加粗一档
       orbitPath(b.r, b.omega);
       ctx.stroke();
     }
@@ -847,33 +866,39 @@ function render(now) {
   }
 
   /* --- 太阳风：从太阳径向吹出的微粒 --- */
+  ctx.fillStyle = "rgb(255, 205, 130)";
   for (const p of solarWind) {
     const fade = clamp(1 - p.r / 500, 0, 1);
-    ctx.fillStyle = `rgba(255, 205, 130, ${p.a * fade})`;
+    ctx.globalAlpha = p.a * fade;
     const x = Math.cos(p.ang) * p.r, y = Math.sin(p.ang) * p.r * tiltCur;
     ctx.fillRect(x - p.size / 2, y - p.size / 2, p.size, p.size);
   }
+  ctx.globalAlpha = 1;
 
   /* --- 小行星带 / 柯伊伯带（zoom 大时淡出，避免遮挡行星特写） --- */
   const astFade = clamp(1.25 / cam.zoom, 0.22, 1);
+  ctx.fillStyle = "rgb(200, 194, 182)";
   for (const a of asteroids) {
     const x = Math.cos(a.ang) * a.a, y = Math.sin(a.ang) * a.a * tiltCur;
-    ctx.fillStyle = `rgba(200, 194, 182, ${a.tone * 0.62 * astFade})`;
+    ctx.globalAlpha = a.tone * 0.62 * astFade;
     const s = a.size * clamp(Math.pow(1 / cam.zoom, 0.6), 0.45, 1.1);
     ctx.fillRect(x - s / 2, y - s / 2, s, s);
   }
   const kFade = clamp(1.6 / cam.zoom, 0.1, 1);
+  ctx.fillStyle = "rgb(170, 178, 200)";
   for (const a of kuiper) {
     const x = Math.cos(a.ang) * a.a, y = Math.sin(a.ang) * a.a * tiltCur;
-    ctx.fillStyle = `rgba(170, 178, 200, ${a.tone * 0.5 * kFade})`;
+    ctx.globalAlpha = a.tone * 0.5 * kFade;
     const s = a.size * clamp(Math.pow(1 / cam.zoom, 0.6), 0.45, 1.1);
     ctx.fillRect(x - s / 2, y - s / 2, s, s);
   }
+  ctx.globalAlpha = 1;
 
-  /* --- 彗尾粒子 --- */
+  /* --- 彗尾粒子（hue 量化 3 档 + globalAlpha,免每粒子拼颜色串） --- */
+  const TAIL_COLORS = ["hsl(188, 90%, 74%)", "hsl(196, 90%, 74%)", "hsl(204, 90%, 74%)"];
   for (const p of cometParts) {
     ctx.globalAlpha = p.life * 0.7;
-    ctx.fillStyle = `hsl(${p.hue}, 90%, 74%)`;
+    ctx.fillStyle = TAIL_COLORS[Math.min(2, (p.hue - 185) / 10 | 0)];
     ctx.beginPath(); ctx.arc(p.x, p.y * tiltCur, p.size * 0.6, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -902,11 +927,11 @@ function render(now) {
         prev = pt;
       }
     }
-    drawPlanet(b, p.x, p.y * tiltCur, now);
+    drawPlanet(b, p.x, p.y * tiltCur);
   }
 
   /* --- 太阳 --- */
-  drawSun(now);
+  drawSun();
 
   /* --- 彗星本体 --- */
   const cp = cometPos();
@@ -939,6 +964,10 @@ function render(now) {
       const ly = s.y - Math.max(b.size * cam.zoom, 8) - 9;
       if (!prio.includes(b) && placed.some(q => Math.abs(q[0] - s.x) < 30 && Math.abs(q[1] - ly) < 12)) continue;
       placed.push([s.x, ly]);
+      // 深色描边垫底,亮星空上仍清晰可读
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(8, 10, 24, .75)";
+      ctx.strokeText(b.name, s.x, ly);
       ctx.fillStyle = hb === b ? "rgba(255, 225, 160, .95)" : "rgba(190, 205, 245, .55)";
       ctx.fillText(b.name, s.x, ly);
     }
@@ -1020,9 +1049,11 @@ function render(now) {
 }
 
 /* ---------- 行星绘制 ---------- */
-function drawPlanet(b, x, y, now) {
+function drawPlanet(b, x, y) {
   const R = b.size;
-  const sunDir = Math.atan2(-y, -x * Math.max(tiltCur, 0.001)); // 指向太阳（投影空间近似）
+  // 指向太阳：x/y 均为投影空间坐标（太阳在原点），直接取反即可；
+  // 旧写法对 x 再乘 tiltCur 属双重压缩，2.5D 下明暗分界会偏向水平
+  const sunDir = Math.atan2(-y, -x);
   const off = R * 0.45;
   const gx = x + Math.cos(sunDir) * off, gy = y + Math.sin(sunDir) * off;
 
@@ -1046,47 +1077,26 @@ function drawPlanet(b, x, y, now) {
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
 
-  // 木星条纹 + 大红斑
+  // 木星条纹：各自独立相位的缓慢摆动（animT：暂停冻结、不随速度倍增）
   if (b.bands) {
     ctx.save();
     ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();
     ctx.globalAlpha = 0.30;
-    const flow = Math.sin(now * 0.0004) * R * 0.08;
     const bands = [-0.55, -0.2, 0.15, 0.5];
-    for (const t of bands) {
+    bands.forEach((t, i) => {
+      const f = Math.sin(animT * 0.4 + i * 1.7) * R * 0.05;
       ctx.fillStyle = "#a06a3e";
-      ctx.fillRect(x - R, y + t * R + flow * Math.sign(t) - R * 0.07, R * 2, R * 0.14);
-    }
-    if (b.spot) {
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = "#c2523a";
-      ctx.beginPath();
-      ctx.ellipse(x + R * 0.34, y + R * 0.3, R * 0.22, R * 0.13, -0.3, 0, TAU);
-      ctx.fill();
-    }
+      ctx.fillRect(x - R, y + t * R + f - R * 0.07, R * 2, R * 0.14);
+    });
     ctx.restore();
     ctx.globalAlpha = 1;
   }
 
-  // 表面纹理斑块：随自转流动，双份绘制覆盖接缝
-  if (b.marks) {
-    const rot = now * 0.00006 * 60 * (b.id === "venus" ? -0.4 : 1);   // 金星逆向自转
-    ctx.save();
-    ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();
-    for (const m of b.marks) {
-      let u = (m[0] + rot) % 1; if (u < 0) u += 1;
-      for (const du of [0, -1]) {
-        const mx = x - R + (u + du) * 2 * R;
-        ctx.globalAlpha = m[5];
-        ctx.fillStyle = m[4];
-        ctx.beginPath();
-        ctx.ellipse(mx, y + m[1] * R, m[2] * R, m[3] * R, 0, 0, TAU);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
-    ctx.globalAlpha = 1;
-  }
+  // 表面纹理斑块：随自转流动（simT 驱动：暂停即冻结,加速时同步变快）,双份绘制覆盖接缝
+  // 大红斑已并入木星 marks,同样随自转绕行
+  if (b.marks) drawSpots(b.marks, x, y, R, 1.76 * (b.id === "venus" ? -0.4 : 1));
+  // 地球云层：白色斑块,比地表流转略快
+  if (b.clouds) drawSpots(b.clouds, x, y, R, 2.1);
 
   // 极冠（地球 / 火星）
   if (b.cap) {
@@ -1101,10 +1111,13 @@ function drawPlanet(b, x, y, now) {
     ctx.globalAlpha = 1;
   }
 
-  // 边缘描一道细光
+  // 边缘细光 + 受光侧大气边缘光（rim light,增强球体感）
   ctx.strokeStyle = "rgba(255,255,255,0.10)";
   ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.13)";
+  ctx.lineWidth = R * 0.07;
+  ctx.beginPath(); ctx.arc(x, y, R * 0.96, sunDir - 1.15, sunDir + 1.15); ctx.stroke();
 
   // 环（前半）
   if (b.ring) drawRing(b, x, y, false);
@@ -1121,6 +1134,26 @@ function drawPlanet(b, x, y, now) {
       ctx.beginPath(); ctx.arc(mx, my, m.size, 0, TAU); ctx.fill();
     }
   }
+}
+
+/* 表面斑块通用绘制：rotRate 单位 rad/模拟年（simT 驱动,暂停冻结、随速度同步） */
+function drawSpots(spots, x, y, R, rotRate) {
+  const rot = simT * rotRate;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.clip();
+  for (const m of spots) {
+    let u = (m[0] + rot / TAU) % 1; if (u < 0) u += 1;
+    for (const du of [0, -1]) {
+      const mx = x - R + (u + du) * 2 * R;
+      ctx.globalAlpha = m[5];
+      ctx.fillStyle = m[4];
+      ctx.beginPath();
+      ctx.ellipse(mx, y + m[1] * R, m[2] * R, m[3] * R, 0, 0, TAU);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 function drawRing(b, x, y, backHalf) {
@@ -1142,6 +1175,16 @@ function drawRing(b, x, y, backHalf) {
     ctx.ellipse(0, 0, r.rx, r.ry, 0, backHalf ? Math.PI : 0, backHalf ? TAU : Math.PI);
     ctx.stroke();
   }
+  if (backHalf) {
+    // 行星投在远侧环上的阴影（近似：远半环整体压暗,与受光方向大致相反,立体感）
+    for (const r of rings) {
+      ctx.strokeStyle = "rgba(8, 10, 22, 0.42)";
+      ctx.lineWidth = r.w;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r.rx, r.ry, 0, Math.PI, TAU);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
@@ -1153,9 +1196,9 @@ function lighten(hex, amt) {
   return `rgb(${r},${g},${b})`;
 }
 
-/* ---------- 太阳绘制 ---------- */
-function drawSun(now) {
-  const pulse = 1 + Math.sin(now * 0.0011) * 0.045 + Math.sin(now * 0.0031) * 0.02;
+/* ---------- 太阳绘制（呼吸/耀斑用 animT：暂停冻结,不随速度倍增） ---------- */
+function drawSun() {
+  const pulse = 1 + Math.sin(animT * 1.1) * 0.045 + Math.sin(animT * 3.1) * 0.02;
   const R = sun.size;
 
   // 外层日冕（多层）
@@ -1171,12 +1214,13 @@ function drawSun(now) {
 
   // 耀斑日珥：从表面鼓起的抛物弧，随相位循环生灭（zoom 大时收敛，避免成"线圈"）
   const flareFade = clamp(1.6 / cam.zoom, 0.25, 1);
+  const flareLW = 0.8 * clamp(cam.zoom, 0.75, 1.6);   // 世界空间线宽按 zoom 补偿,屏幕粗细近似恒定
   for (const f of flares) {
-    const prog = (now * 0.00012 * f.speed * 60 + f.phase) % 1;     // 0→1 循环
+    const prog = (animT * 0.0072 * f.speed + f.phase) % 1;        // 0→1 循环
     const alpha = Math.sin(prog * Math.PI) * 0.30 * flareFade;
-    const a0 = f.baseAng + Math.sin(now * 0.0002 + f.phase * 9) * 0.15;
+    const a0 = f.baseAng + Math.sin(animT * 0.2 + f.phase * 9) * 0.15;
     ctx.strokeStyle = `hsla(${f.hue}, 100%, 66%, ${alpha})`;
-    ctx.lineWidth = 0.8;
+    ctx.lineWidth = flareLW;
     ctx.beginPath();
     const segN = 16;
     const spread = f.spread * 0.6 * (0.5 + 0.5 * flareFade);
@@ -1253,8 +1297,10 @@ function syncNav() {
 function fillCard(b) {
   document.getElementById("cName").textContent = b.name;
   document.getElementById("cEn").textContent = b.en;
+  document.getElementById("cType").textContent = b.type || "—";
   document.getElementById("cDia").textContent = b.dia;
   document.getElementById("cPer").textContent = b.per;
+  document.getElementById("cSpin").textContent = b.spin || "—";
   document.getElementById("cDist").textContent = b.dist;
   document.getElementById("cFun").textContent = b.fun;
   document.getElementById("cHist").textContent = b.hist || "—";

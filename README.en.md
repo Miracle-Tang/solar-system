@@ -19,7 +19,8 @@
 
 ## ✨ Features
 
-- **8 planets + Pluto**: lit-side radial gradients, Kepler-like orbital speeds, motion trails; surface markings drift with rotation (Earth continents, Venus retrograde, Mars polar caps, Neptune's Great Dark Spot)
+- **8 planets + Pluto**: lit-side radial gradients, Kepler-like orbital speeds, motion trails; surface markings drift with rotation (Earth continents + a separate drifting cloud layer, Venus retrograde, Mars polar caps, Neptune's Great Dark Spot), Jupiter's Great Red Spot orbits with the spin; day-side rim light; the sunlit hemisphere always faces the Sun (in 2.5D too)
+- **Time freeze is real**: pausing halts spin, cloud drift, band ripple, corona pulse & prominences (simT/animT-driven)
 - **2.5D view**: smooth transition between top-down disc and tilted perspective; each orbit oriented by its **real longitude of perihelion**
 - **Moons**: Earth's Moon + the four Galilean moons of Jupiter; Uranus rolls on its side with a near-vertical ring
 - **Details**: Saturn's 3-layer rings with occlusion, Jupiter's bands & Great Red Spot, asteroid belt (760), Kuiper belt (520)
