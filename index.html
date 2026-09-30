@@ -155,6 +155,10 @@
 
   /* 按压反馈：所有面板/导航按钮统一微缩 */
   #panel button:active, #nav button:active { transform: scale(.92); }
+  /* 键盘导航焦点环（鼠标点击不显示） */
+  #panel button:focus-visible, #nav button:focus-visible {
+    outline: 2px solid rgba(125, 211, 252, .7); outline-offset: 2px;
+  }
 
   /* 系统开启「减弱动态效果」：入场动画与过渡瞬时完成(JS 侧同时关闭曲速线) */
   @media (prefers-reduced-motion: reduce) {
@@ -245,7 +249,7 @@
 </style>
 </head>
 <body>
-<canvas id="stage"></canvas>
+<canvas id="stage" role="img" aria-label="交互式太阳系画布：可拖拽平移、滚轮缩放、点击行星查看档案"></canvas>
 
 <div id="brand"><h1>SOLARIS</h1><p>太 阳 系 漫 游 · 点 击 行 星 抵 达</p></div>
 
@@ -288,6 +292,7 @@
       <tr><td>双指捏合</td><td>触屏设备缩放（与滚轮等效）</td></tr>
       <tr><td><kbd>Esc</kbd> / 空白处</td><td>返回全景视角</td></tr>
       <tr><td><kbd>Space</kbd></td><td>暂停 / 继续时间流动</td></tr>
+      <tr><td><kbd>?</kbd> / <kbd>H</kbd></td><td>打开 / 关闭本指南</td></tr>
       <tr><td>速度滑块</td><td>0（冻结）~ 10× 时间流速</td></tr>
     </table>
     <button id="helpClose">启程</button>
@@ -845,13 +850,17 @@ function render(now) {
       ctx.closePath();
     };
     for (const b of BODIES) {
-      ctx.strokeStyle = hb === b ? "rgba(255, 214, 150, 0.42)" : "rgba(150, 170, 230, 0.13)";
-      ctx.lineWidth = hb === b ? 1.8 / cam.zoom : 1 / cam.zoom;   // 悬停轨道加粗一档
+      // 悬停最亮、当前跟随次之(始终知道自己"在哪条轨道")
+      const hl = hb === b ? 2 : focusBody === b ? 1 : 0;
+      ctx.strokeStyle = hl === 2 ? "rgba(255, 214, 150, 0.42)" : hl === 1 ? "rgba(255, 210, 130, 0.26)" : "rgba(150, 170, 230, 0.13)";
+      ctx.lineWidth = (hl === 2 ? 1.8 : hl === 1 ? 1.4 : 1) / cam.zoom;
       orbitPath(b.r, b.omega);
       ctx.stroke();
     }
     // 彗星轨道
-    ctx.strokeStyle = hb === comet ? "rgba(140, 220, 250, 0.38)" : "rgba(120, 200, 235, 0.10)";
+    const cHl = hb === comet ? 2 : focusBody === comet ? 1 : 0;
+    ctx.strokeStyle = cHl === 2 ? "rgba(140, 220, 250, 0.38)" : cHl === 1 ? "rgba(140, 215, 245, 0.24)" : "rgba(120, 200, 235, 0.10)";
+    ctx.lineWidth = (cHl === 2 ? 1.8 : cHl === 1 ? 1.4 : 1) / cam.zoom;
     const cO = comet.omega, ca = comet.a, ce = comet.e;
     ctx.beginPath();
     for (let i = 0; i <= ORB_SEGS; i++) {
@@ -957,10 +966,12 @@ function render(now) {
     const prio = [focusBody, hb].filter(Boolean);
     const labeled = [...new Set([...prio, ...BODIES, comet])];
     const placed = [];
+    const closeup = cam.zoom > 2.2;          // 特写模式:非焦点/悬停标签让位,画面干净
     for (const b of labeled) {
       const p = focusPos(b);
       const s = w2s(p.x, p.y);
       if (s.x < -40 || s.x > W + 40 || s.y < -20 || s.y > H + 20) continue;
+      if (closeup && b !== focusBody && b !== hb) continue;
       const ly = s.y - Math.max(b.size * cam.zoom, 8) - 9;
       if (!prio.includes(b) && placed.some(q => Math.abs(q[0] - s.x) < 30 && Math.abs(q[1] - ly) < 12)) continue;
       placed.push([s.x, ly]);
@@ -968,7 +979,7 @@ function render(now) {
       ctx.lineWidth = 3;
       ctx.strokeStyle = "rgba(8, 10, 24, .75)";
       ctx.strokeText(b.name, s.x, ly);
-      ctx.fillStyle = hb === b ? "rgba(255, 225, 160, .95)" : "rgba(190, 205, 245, .55)";
+      ctx.fillStyle = hb === b ? "rgba(255, 225, 160, .95)" : b === focusBody ? "rgba(255, 225, 160, .6)" : "rgba(190, 205, 245, .55)";
       ctx.fillText(b.name, s.x, ly);
     }
   }
@@ -1420,6 +1431,7 @@ window.addEventListener("keydown", e => {
   }
   if (e.code === "Space") { e.preventDefault(); togglePause(); }
   else if (e.key === "Escape") setFocus(null);
+  else if (e.key === "?" || e.key === "h" || e.key === "H") help.classList.add("show");
   else if (e.key === "v" || e.key === "V") document.getElementById("tiltBtn").click();
   else if (e.key === "+" || e.key === "=") cam.tzoom = clamp(cam.tzoom * 1.3, ZMIN, ZMAX);   // 围绕焦点推近
   else if (e.key === "-" || e.key === "_") cam.tzoom = clamp(cam.tzoom / 1.3, ZMIN, ZMAX);
